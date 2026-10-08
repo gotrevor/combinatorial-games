@@ -26,6 +26,7 @@ public import CombinatorialGames.Game.Specific.Poset
 public import CombinatorialGames.Mathlib.Dyadic
 public import CombinatorialGames.Mathlib.EtaSet
 public import CombinatorialGames.Mathlib.Small
+public import CombinatorialGames.Mathlib.Trajectory
 public import CombinatorialGames.Mathlib.WithTop
 public import CombinatorialGames.NatOrdinal.Basic
 public import CombinatorialGames.NatOrdinal.Pow
