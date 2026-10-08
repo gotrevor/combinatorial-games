@@ -8,13 +8,12 @@ module
 public import CombinatorialGames.Mathlib.Dyadic
 public import Mathlib.Data.Finset.Max
 public import Mathlib.Data.Finset.Union
-public import Mathlib.Data.Quot
 public import Mathlib.Order.Interval.Set.ProjIcc
 public import Mathlib.Order.LatticeIntervals
 
 import Mathlib.Algebra.Order.Group.MinMax
-import Mathlib.Tactic.Linarith
-import Mathlib.Tactic.Ring
+import Mathlib.Tactic.Linarith -- shake: keep
+import Mathlib.Tactic.Ring.RingNF
 
 /-!
 # Trajectories
@@ -24,9 +23,9 @@ breakpoints, whose slopes are all `0` or `1`. These are the building blocks of t
 walls of a short game (Siegel, *Combinatorial Game Theory*, pp. 106-107).
 
 Trajectories form a distributive lattice under pointwise `min` and `max`, and are closed under the
-reflection `t ↦ t - f t`, which swaps the slopes `0` and `1`. Since a sum `f + g` of two trajectories
-has slopes `0`, `1` or `2`, the least `t` with `0 ≤ f t + g t` is dyadic; we compute it as
-`Trajectory.crossing`.
+reflection `t ↦ t - f t`, which swaps the slopes `0` and `1`. Since a sum `f + g` of two
+trajectories has slopes `0`, `1` or `2`, the least `t` with `0 ≤ f t + g t` is dyadic; we compute it
+as `Trajectory.crossing`.
 
 ## Implementation notes
 
@@ -34,8 +33,8 @@ A trajectory is stored as its underlying function, together with a finite set of
 contains its breakpoints. This set is wrapped in `Trunc`, so that trajectories with the same values
 are equal, while the breakpoints remain available to computations such as `Trajectory.crossing`.
 
-The notation `𝔻≥-1` stands for `Set.Ici (-1 : Dyadic)`, rather than the subtype
-`{t : Dyadic // -1 ≤ t}` used in #462.
+The notation `𝔻≥-1` for `Set.Ici (-1 : Dyadic)` clashes with the subtype notation of the same name
+in #462.
 -/
 
 @[expose] public section
@@ -57,13 +56,10 @@ variable {s s' : Finset 𝔻≥-1} {f g : 𝔻≥-1 → Dyadic} {q t u : 𝔻≥
 theorem IsBreakSet.linear (hf : IsBreakSet s f) (hqu : q ≤ u)
     (hd : Disjoint (s : Set 𝔻≥-1) (Ioo q u)) :
     (∀ t ∈ Icc q u, f t = f q) ∨ ∀ t ∈ Icc q u, f t = f q + (t - q) := by
-  have H {t} (ht : t ∈ Icc q u) := And.intro
-    (hf ht.1 (hd.mono_right (Ioo_subset_Ioo_right ht.2)))
-    (hf ht.2 (hd.mono_right (Ioo_subset_Ioo_left ht.1)))
-  obtain h | h := hf hqu hd <;> [left; right] <;> intro t ht <;>
-  · have : (q : Dyadic) ≤ t := ht.1
-    have : (t : Dyadic) ≤ u := ht.2
-    obtain ⟨h₁ | h₁, h₂ | h₂⟩ := H ht <;> linarith
+  obtain h | h := hf hqu hd <;> [left; right] <;> intro t ⟨hqt, htu⟩ <;>
+    obtain h₁ | h₁ := hf hqt (hd.mono_right (Ioo_subset_Ioo_right htu)) <;>
+    obtain h₂ | h₂ := hf htu (hd.mono_right (Ioo_subset_Ioo_left hqt)) <;>
+    linarith [Subtype.coe_le_coe.2 hqt, Subtype.coe_le_coe.2 htu]
 
 theorem IsBreakSet.monotone (hf : IsBreakSet s f) : Monotone f := by
   suffices ∀ r : Finset 𝔻≥-1, ∀ ⦃t u⦄, t ≤ u → (∀ x ∈ s, x ∈ Ioo t u → x ∈ r) → f t ≤ f u from
@@ -72,25 +68,22 @@ theorem IsBreakSet.monotone (hf : IsBreakSet s f) : Monotone f := by
   induction r using Finset.induction_on with
   | empty =>
     intro t u htu h
-    have : (t : Dyadic) ≤ u := htu
     obtain h | h := hf htu (disjoint_left.2 fun x hx hx' ↦ by simpa using h x hx hx') <;>
-      linarith
+      linarith [Subtype.coe_le_coe.2 htu]
   | insert a r _ ih =>
     intro t u htu h
     by_cases ha : a ∈ Ioo t u
-    · refine (ih ha.1.le fun x hx hx' ↦ ?_).trans (ih ha.2.le fun x hx hx' ↦ ?_) <;>
-        obtain rfl | h := Finset.mem_insert.1 (h x hx (by grind)) <;> grind
-    · exact ih htu fun x hx hx' ↦ (Finset.mem_insert.1 (h x hx hx')).resolve_left (by grind)
+    · exact (ih ha.1.le fun x hx hx' ↦ by grind).trans (ih ha.2.le fun x hx hx' ↦ by grind)
+    · exact ih htu fun x hx hx' ↦ by grind
 
 theorem IsBreakSet.reflect (hf : IsBreakSet s f) : IsBreakSet s fun t ↦ t - f t :=
   fun _ _ htu hd ↦ by rcases hf htu hd with h | h <;> simp only [h] <;> [right; left] <;> ring
 
-/-- The greatest point of `insert ⊥ s` below `t`. -/
-theorem exists_prev (s : Finset 𝔻≥-1) (ht : ⊥ < t) :
+/-- Every `t > ⊥` has a predecessor in `insert ⊥ s`, with no point of `s` in between. -/
+private theorem exists_prev (s : Finset 𝔻≥-1) (ht : ⊥ < t) :
     ∃ q ∈ insert ⊥ s, q < t ∧ Disjoint (s : Set 𝔻≥-1) (Ioo q t) := by
   let F := (insert ⊥ s).filter (· < t)
-  have hF : F.Nonempty := ⟨⊥, by simp [F, ht]⟩
-  obtain ⟨hq, hqt⟩ := Finset.mem_filter.1 (F.max'_mem hF)
+  obtain ⟨hq, hqt⟩ := Finset.mem_filter.1 (F.max'_mem ⟨⊥, by simp [F, ht]⟩)
   refine ⟨_, hq, hqt, disjoint_left.2 fun p hp hp' ↦ hp'.1.not_ge (F.le_max' p ?_)⟩
   simp [F, Finset.mem_coe.1 hp, hp'.2]
 
@@ -105,10 +98,8 @@ theorem IsBreakSet.min (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
   obtain rfl | htu := htu.eq_or_lt
   · simp
   obtain ⟨q, hq, hqu, hq'⟩ := exists_prev s (bot_le.trans_lt htu)
-  have hqt : q ≤ t := by
-    by_contra! h
-    have : q ∈ s := (Finset.mem_insert.1 hq).resolve_left (bot_le.trans_lt h).ne'
-    exact disjoint_left.1 hd (Finset.mem_coe.2 (Finset.mem_union_left _ this)) ⟨h, hqu⟩
+  have hqt : q ≤ t := not_lt.1 fun h ↦ disjoint_left.1 hd
+    (by simp [(Finset.mem_insert.1 hq).resolve_left (bot_le.trans_lt h).ne']) ⟨h, hqu⟩
   have hc (x : Dyadic) (hx : projIci (-1) x ∈ ({projIci (-1) (q + (f q - g q)),
       projIci (-1) (q - (f q - g q))} : Finset 𝔻≥-1)) : x ≤ t ∨ u ≤ x := by
     have h := disjoint_left.1 hd (Finset.mem_coe.2 (Finset.mem_union_right _
@@ -123,9 +114,7 @@ theorem IsBreakSet.min (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
   have ht : t ∈ Icc q u := ⟨hqt, htu.le⟩
   have hu : u ∈ Icc q u := ⟨hqu.le, le_rfl⟩
   obtain hF | hF := hf.linear hqu.le hq' <;> obtain hG | hG := hg.linear hqu.le hq' <;>
-  · beta_reduce
-    rw [hF t ht, hF u hu, hG t ht, hG u hu]
-    grind
+    grind [hF t ht, hF u hu, hG t ht, hG u hu]
 
 /-- The least `t` with `0 ≤ f t + g t`, computed from a set `s` containing the breakpoints of `f`
 and `g`. On an interval where `f + g` is linear with slope `1` or `2`, its zero is at
@@ -142,8 +131,7 @@ theorem crossingAux_le_iff (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
     ((hf.monotone.add hg.monotone) (WithTop.coe_le_coe.1 hct)), fun ht ↦ ?_⟩
   let B := (insert t (insert ⊥ s)).filter fun t ↦ 0 ≤ f t + g t
   have hB : t ∈ B := by simp [B, ht]
-  obtain ⟨hbB, hb0⟩ := Finset.mem_filter.1 (B.min'_mem ⟨t, hB⟩)
-  have hbt := B.min'_le t hB
+  obtain ⟨-, hb0⟩ := Finset.mem_filter.1 (B.min'_mem ⟨t, hB⟩)
   set b := B.min' ⟨t, hB⟩
   obtain hb | hb := eq_bot_or_bot_lt b
   · exact ⟨⊥, by simp [← hb, hb0], by simp⟩
@@ -153,7 +141,7 @@ theorem crossingAux_le_iff (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
     exact (B.min'_le q (by simp [B, Finset.mem_insert.1 hq, h])).not_gt hqb
   have : -1 ≤ (q : Dyadic) := q.2
   have : (q : Dyadic) < b := hqb
-  have : (b : Dyadic) ≤ t := hbt
+  have : (b : Dyadic) ≤ t := B.min'_le t hB
   have hm : Dyadic.half * (f q + g q) + .half * (f q + g q) = f q + g q := by
     rw [← add_mul, show Dyadic.half + .half = 1 by decide, one_mul]
   suffices ∃ x, projIci (-1) x ∈ ({projIci (-1) (q - (f q + g q)),
@@ -189,9 +177,7 @@ variable {f g : Trajectory} {t : 𝔻≥-1}
 
 instance : FunLike Trajectory 𝔻≥-1 Dyadic where
   coe := toFun
-  coe_injective := by
-    rintro ⟨f, s⟩ ⟨g, s'⟩ rfl
-    rw [Subsingleton.elim s s']
+  coe_injective := by rintro ⟨⟩ ⟨⟩ rfl; congr; exact Subsingleton.elim ..
 
 @[simp] theorem coe_mk (f h) : ⇑(mk f h) = f := rfl
 
@@ -201,6 +187,11 @@ protected theorem ext (h : ∀ t, f t = g t) : f = g :=
 
 protected theorem monotone (f : Trajectory) : Monotone f :=
   f.breaks.out.2.monotone
+
+/-- A common set of breakpoints for two trajectories. -/
+def breaks₂ (f g : Trajectory) : Trunc {s // IsBreakSet s f ∧ IsBreakSet s g} :=
+  f.breaks.bind fun s ↦ g.breaks.map fun s' ↦
+    ⟨s.1 ∪ s'.1, s.2.mono Finset.subset_union_left, s'.2.mono Finset.subset_union_right⟩
 
 /-! ### Basic trajectories -/
 
@@ -225,8 +216,7 @@ theorem reflect_reflect (f : Trajectory) : reflect (reflect f) = f := by
 /-! ### Lattice structure -/
 
 instance : Min Trajectory where
-  min f g := ⟨fun t ↦ min (f t) (g t),
-    f.breaks.bind fun s ↦ g.breaks.map fun s' ↦ ⟨_, (s.2.mono Finset.subset_union_left).min (s'.2.mono Finset.subset_union_right)⟩⟩
+  min f g := ⟨fun t ↦ min (f t) (g t), (breaks₂ f g).map fun s ↦ ⟨_, s.2.1.min s.2.2⟩⟩
 
 instance : Max Trajectory where
   max f g := reflect (min (reflect f) (reflect g))
@@ -256,24 +246,19 @@ theorem reflect_sup (f g : Trajectory) : reflect (f ⊔ g) = reflect f ⊓ refle
 
 @[simp]
 theorem reflect_inf (f g : Trajectory) : reflect (f ⊓ g) = reflect f ⊔ reflect g := by
-  rw [← reflect_reflect (_ ⊔ _), reflect_sup, reflect_reflect, reflect_reflect]
+  ext; simp [max_sub_sub_left]
 
 /-! ### Intermediate value theorem -/
 
 /-- The least `t` with `0 ≤ f t + g t`, or `⊤` if there is none. -/
 def crossing (f g : Trajectory) : WithTop 𝔻≥-1 :=
-  (f.breaks.bind fun s ↦ g.breaks.map fun s' ↦ (⟨s.1 ∪ s'.1, s.2.mono Finset.subset_union_left,
-    s'.2.mono Finset.subset_union_right⟩ : {s // IsBreakSet s f ∧ IsBreakSet s g})).lift
-    (fun s ↦ crossingAux f g s.1) fun s s' ↦ eq_of_forall_ge_iff fun c ↦ by
-      induction c using WithTop.recTopCoe <;>
-        simp [crossingAux_le_iff s.2.1 s.2.2, crossingAux_le_iff s'.2.1 s'.2.2]
+  (breaks₂ f g).lift (crossingAux f g ·.1) fun s s' ↦ eq_of_forall_ge_iff fun c ↦ by
+    induction c using WithTop.recTopCoe <;>
+      simp [crossingAux_le_iff s.2.1 s.2.2, crossingAux_le_iff s'.2.1 s'.2.2]
 
 theorem crossing_le_iff : crossing f g ≤ t ↔ 0 ≤ f t + g t := by
-  obtain ⟨f, F⟩ := f
-  obtain ⟨g, G⟩ := g
-  induction F using Trunc.ind with | _ F
-  induction G using Trunc.ind with | _ G
-  exact crossingAux_le_iff (F.2.mono Finset.subset_union_left) (G.2.mono Finset.subset_union_right)
+  unfold crossing
+  induction breaks₂ f g using Trunc.ind with | _ s => exact crossingAux_le_iff s.2.1 s.2.2
 
 -- The scaffolds of `⋆` meet at `0`, and those of `½` at `-½`.
 example : crossing (reflect (const 0)) (reflect (const 0)) = ↑(⟨0, by decide⟩ : 𝔻≥-1) := rfl
