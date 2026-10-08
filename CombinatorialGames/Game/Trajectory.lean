@@ -79,13 +79,15 @@ theorem IsBreakSet.monotone (hf : IsBreakSet s f) : Monotone f := by
 theorem IsBreakSet.reflect (hf : IsBreakSet s f) : IsBreakSet s fun t ↦ t - f t :=
   fun _ _ htu hd ↦ by rcases hf htu hd with h | h <;> simp only [h] <;> [right; left] <;> ring
 
-/-- Every `t > ⊥` has a predecessor in `insert ⊥ s`, with no point of `s` in between. -/
-private theorem exists_prev (s : Finset 𝔻≥-1) (ht : ⊥ < t) :
-    ∃ q ∈ insert ⊥ s, q < t ∧ Disjoint (s : Set 𝔻≥-1) (Ioo q t) := by
-  let F := (insert ⊥ s).filter (· < t)
-  obtain ⟨hq, hqt⟩ := Finset.mem_filter.1 (F.max'_mem ⟨⊥, by simp [F, ht]⟩)
-  refine ⟨_, hq, hqt, disjoint_left.2 fun p hp hp' ↦ hp'.1.not_ge (F.le_max' p ?_)⟩
-  simp [F, Finset.mem_coe.1 hp, hp'.2]
+/-- An interval which doesn't meet `s` extends leftwards to one starting in `insert ⊥ s`. -/
+private theorem exists_extend (hd : Disjoint (s : Set 𝔻≥-1) (Ioo t u)) :
+    ∃ q ∈ insert ⊥ s, q ≤ t ∧ Disjoint (s : Set 𝔻≥-1) (Ioo q u) := by
+  let F := (insert ⊥ s).filter (· ≤ t)
+  obtain ⟨hq, hqt⟩ := Finset.mem_filter.1 (F.max'_mem ⟨⊥, by simp [F]⟩)
+  refine ⟨_, hq, hqt, disjoint_left.2 fun p hp hp' ↦ ?_⟩
+  by_cases hpt : p ≤ t
+  · exact hp'.1.not_ge (F.le_max' p (by simp [F, Finset.mem_coe.1 hp, hpt]))
+  · exact disjoint_left.1 hd hp ⟨not_le.1 hpt, hp'.2⟩
 
 theorem IsBreakSet.mono (hf : IsBreakSet s f) (hs : s ⊆ s') : IsBreakSet s' f :=
   fun _ _ htu hd ↦ hf htu (hd.mono_left (Finset.coe_subset.2 hs))
@@ -95,33 +97,23 @@ theorem IsBreakSet.min (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
       {projIci (-1) (q + (f q - g q)), projIci (-1) (q - (f q - g q))})
       fun t ↦ min (f t) (g t) := by
   intro t u htu hd
-  obtain rfl | htu := htu.eq_or_lt
-  · simp
-  obtain ⟨q, hq, hqu, hq'⟩ := exists_prev s (bot_le.trans_lt htu)
-  have hqt : q ≤ t := not_lt.1 fun h ↦ disjoint_left.1 hd
-    (by simp [(Finset.mem_insert.1 hq).resolve_left (bot_le.trans_lt h).ne']) ⟨h, hqu⟩
-  have hc (x : Dyadic) (hx : projIci (-1) x ∈ ({projIci (-1) (q + (f q - g q)),
-      projIci (-1) (q - (f q - g q))} : Finset 𝔻≥-1)) : x ≤ t ∨ u ≤ x := by
-    have h := disjoint_left.1 hd (Finset.mem_coe.2 (Finset.mem_union_right _
-      (Finset.mem_biUnion.2 ⟨q, hq, hx⟩)))
-    rw [mem_Ioo, ← Subtype.coe_lt_coe, ← Subtype.coe_lt_coe, coe_projIci] at h
-    have := mem_Ici.1 t.2
-    grind
-  have h₁ := hc (q + (f q - g q)) (by simp)
-  have h₂ := hc (q - (f q - g q)) (by simp)
-  have : (q : Dyadic) ≤ t := hqt
-  have : (t : Dyadic) < u := htu
-  have ht : t ∈ Icc q u := ⟨hqt, htu.le⟩
-  have hu : u ∈ Icc q u := ⟨hqu.le, le_rfl⟩
-  obtain hF | hF := hf.linear hqu.le hq' <;> obtain hG | hG := hg.linear hqu.le hq' <;>
-    grind [hF t ht, hF u hu, hG t ht, hG u hu]
+  obtain ⟨q, hq, hqt, hq'⟩ :=
+    exists_extend (hd.mono_left (Finset.coe_subset.2 Finset.subset_union_left))
+  have hc := hd.mono_left <| Finset.coe_subset.2 <|
+    (Finset.subset_biUnion_of_mem _ hq).trans Finset.subset_union_right
+  simp [← Subtype.coe_lt_coe, coe_projIci] at hc
+  have ht : t ∈ Icc q u := ⟨hqt, htu⟩
+  have hu : u ∈ Icc q u := ⟨hqt.trans htu, le_rfl⟩
+  obtain hF | hF := hf.linear hu.1 hq' <;> obtain hG | hG := hg.linear hu.1 hq' <;>
+    grind [mem_Ici.1 t.2, hF t ht, hF u hu, hG t ht, hG u hu, Subtype.coe_le_coe.2 hqt,
+      Subtype.coe_le_coe.2 htu]
 
 /-- The least `t` with `0 ≤ f t + g t`, computed from a set `s` containing the breakpoints of `f`
-and `g`. On an interval where `f + g` is linear with slope `1` or `2`, its zero is at
-`q - (f q + g q)` or `q - (f q + g q) / 2`. -/
+and `g`. The candidates are the points `q ∈ insert ⊥ s`, and the zeros `q - (f q + g q)` and
+`q - (f q + g q) / 2` of `f + g` on the interval following `q`, if its slope there is `1` or `2`. -/
 def crossingAux (f g : 𝔻≥-1 → Dyadic) (s : Finset 𝔻≥-1) : WithTop 𝔻≥-1 :=
-  Finset.min <| (insert ⊥ ((insert ⊥ s).biUnion fun q ↦
-    {projIci (-1) (q - (f q + g q)), projIci (-1) (q - .half * (f q + g q))})).filter
+  Finset.min <| ((insert ⊥ s).biUnion fun q ↦
+    {q, projIci (-1) (q - (f q + g q)), projIci (-1) (q - .half * (f q + g q))}).filter
       fun t ↦ 0 ≤ f t + g t
 
 theorem crossingAux_le_iff (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
@@ -129,38 +121,31 @@ theorem crossingAux_le_iff (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
   rw [crossingAux, Finset.min_eq_inf_withTop, Finset.inf_le_iff (WithTop.coe_lt_top t)]
   refine ⟨fun ⟨c, hc, hct⟩ ↦ (Finset.mem_filter.1 hc).2.trans
     ((hf.monotone.add hg.monotone) (WithTop.coe_le_coe.1 hct)), fun ht ↦ ?_⟩
-  let B := (insert t (insert ⊥ s)).filter fun t ↦ 0 ≤ f t + g t
-  have hB : t ∈ B := by simp [B, ht]
-  obtain ⟨-, hb0⟩ := Finset.mem_filter.1 (B.min'_mem ⟨t, hB⟩)
-  set b := B.min' ⟨t, hB⟩
-  obtain hb | hb := eq_bot_or_bot_lt b
-  · exact ⟨⊥, by simp [← hb, hb0], by simp⟩
-  obtain ⟨q, hq, hqb, hd⟩ := exists_prev s hb
-  have hq0 : f q + g q < 0 := by
-    by_contra! h
-    exact (B.min'_le q (by simp [B, Finset.mem_insert.1 hq, h])).not_gt hqb
-  have : -1 ≤ (q : Dyadic) := q.2
-  have : (q : Dyadic) < b := hqb
-  have : (b : Dyadic) ≤ t := B.min'_le t hB
+  obtain ⟨q, hq, hqt, hd⟩ := exists_extend (s := s) (Ioo_self t ▸ disjoint_empty _)
+  suffices ∃ x ∈ ({q, projIci (-1) (q - (f q + g q)), projIci (-1) (q - .half * (f q + g q))} :
+      Finset 𝔻≥-1), x ≤ t ∧ 0 ≤ f x + g x by
+    obtain ⟨x, hx, hxt, h0⟩ := this
+    exact ⟨x, Finset.mem_filter.2 ⟨Finset.mem_biUnion.2 ⟨q, hq, hx⟩, h0⟩, WithTop.coe_le_coe.2 hxt⟩
+  by_cases hq0 : 0 ≤ f q + g q
+  · exact ⟨q, by simp, hqt, hq0⟩
   have hm : Dyadic.half * (f q + g q) + .half * (f q + g q) = f q + g q := by
     rw [← add_mul, show Dyadic.half + .half = 1 by decide, one_mul]
-  suffices ∃ x, projIci (-1) x ∈ ({projIci (-1) (q - (f q + g q)),
-      projIci (-1) (q - .half * (f q + g q))} : Finset 𝔻≥-1) ∧ q < x ∧ x ≤ b ∧
-      ∀ y : 𝔻≥-1, (y : Dyadic) = x → y ∈ Icc q b → 0 ≤ f y + g y by
-    obtain ⟨x, hx, hqx, hxb, h0⟩ := this
-    have hy : (projIci (-1) x : Dyadic) = x := max_eq_right (by linarith)
-    exact ⟨_, Finset.mem_filter.2 ⟨Finset.mem_insert_of_mem (Finset.mem_biUnion.2 ⟨q, hq, hx⟩),
-      h0 _ hy ⟨Subtype.coe_le_coe.1 (by linarith), Subtype.coe_le_coe.1 (by linarith)⟩⟩,
-      WithTop.coe_le_coe.2 (Subtype.coe_le_coe.1 (by linarith))⟩
-  have hbI : b ∈ Icc q b := ⟨hqb.le, le_rfl⟩
-  obtain hF | hF := hf.linear hqb.le hd <;> obtain hG | hG := hg.linear hqb.le hd <;>
-    have := hF b hbI <;> have := hG b hbI <;>
+  have : (q : Dyadic) ≤ t := hqt
+  have key (x : Dyadic) (hqx : q < x) (hxt : x ≤ t)
+      (h : ∀ y ∈ Icc q t, (y : Dyadic) = x → 0 ≤ f y + g y) :
+      projIci (-1) x ≤ t ∧ 0 ≤ f (projIci (-1) x) + g (projIci (-1) x) := by
+    have := q.2
+    have hI : projIci (-1) x ∈ Icc q t := by
+      simp only [mem_Icc, ← Subtype.coe_le_coe, coe_projIci]; grind
+    exact ⟨hI.2, h _ hI (max_eq_right (by grind))⟩
+  obtain hF | hF := hf.linear hqt hd <;> obtain hG | hG := hg.linear hqt hd <;>
+    have := hF t ⟨hqt, le_rfl⟩ <;> have := hG t ⟨hqt, le_rfl⟩ <;>
     first
-    | (exfalso; linarith)
-    | exact ⟨q - (f q + g q), by simp, by linarith, by linarith,
-        fun y hy hyI ↦ by rw [hF y hyI, hG y hyI]; linarith⟩
-    | exact ⟨q - .half * (f q + g q), by simp, by linarith, by linarith,
-        fun y hy hyI ↦ by rw [hF y hyI, hG y hyI]; linarith⟩
+    | linarith
+    | exact ⟨_, by simp, key (q - (f q + g q)) (by linarith) (by linarith)
+        fun y hy hyx ↦ by rw [hF y hy, hG y hy]; linarith⟩
+    | exact ⟨_, by simp, key (q - .half * (f q + g q)) (by linarith) (by linarith)
+        fun y hy hyx ↦ by rw [hF y hy, hG y hy]; linarith⟩
 
 end Trajectory
 
