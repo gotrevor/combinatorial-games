@@ -33,8 +33,8 @@ are then minima of reflections `t ↦ t - wall (-p) y t` of walls of options `y`
 recursion only involves options of `x`.
 
 Every short game without left or right options equals an integer, but so do forms such as
-`!{{-2} | {2}}`, whose scaffolds meet at `-1` with values `1` and `-1`, rather than `0`. We therefore
-case on whether `x` equals an integer, which makes these definitions noncomputable.
+`!{{-2} | {2}}`, whose scaffolds meet at `-1` with values `1` and `-1`, rather than `0`. We
+therefore case on whether `x` equals an integer, which makes these definitions noncomputable.
 -/
 
 public noncomputable section
