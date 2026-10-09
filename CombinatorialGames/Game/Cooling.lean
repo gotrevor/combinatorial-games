@@ -50,7 +50,7 @@ variable {x y : IGame} [Short x] [Short y] {p : Player} {t : 𝔻≥-1}
 
 /-! ### Stops -/
 
-private theorem rightStop_eq_of {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b : IGame) ≤ x)
+theorem rightStop_eq_of_forall {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b : IGame) ≤ x)
     (h₂ : ∀ b : Dyadic, a < b → x ⧏ b) : rightStop x = a := by
   refine le_antisymm (not_lt.1 fun h ↦ ?_) (not_lt.1 fun h ↦ ?_)
   · obtain ⟨b, hab, hb⟩ := exists_between h
@@ -58,7 +58,7 @@ private theorem rightStop_eq_of {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (
   · obtain ⟨b, hb, hba⟩ := exists_between h
     exact lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 hb) (h₁ b hba)
 
-private theorem leftStop_eq_of {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b : IGame) ⧏ x)
+theorem leftStop_eq_of_forall {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b : IGame) ⧏ x)
     (h₂ : ∀ b : Dyadic, a < b → x ≤ b) : leftStop x = a := by
   refine le_antisymm (not_lt.1 fun h ↦ ?_) (not_lt.1 fun h ↦ ?_)
   · obtain ⟨b, hab, hb⟩ := exists_between h
@@ -66,27 +66,48 @@ private theorem leftStop_eq_of {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b
   · obtain ⟨b, hb, hba⟩ := exists_between h
     exact h₁ b hba (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 hb)).le
 
-private theorem le_leftStop_of_lf {a : Dyadic} (h : (a : IGame) ⧏ x) : a ≤ leftStop x :=
+theorem le_leftStop_of_lf {a : Dyadic} (h : (a : IGame) ⧏ x) : a ≤ leftStop x :=
   not_lt.1 fun ha ↦ h (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 ha)).le
 
-private theorem rightStop_mono (h : x ≤ y) : rightStop x ≤ rightStop y :=
+theorem rightStop_le_of_lf {a : Dyadic} (h : x ⧏ a) : rightStop x ≤ a :=
+  not_lt.1 fun ha ↦ h (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 ha)).le
+
+theorem rightStop_le_rightStop (h : x ≤ y) : rightStop x ≤ rightStop y :=
   not_lt.1 fun hs ↦ by
     obtain ⟨b, hb, hb'⟩ := exists_between hs
     exact lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 hb)
       ((lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 hb')).le.trans h)
 
+theorem leftStop_le_leftStop (h : x ≤ y) : leftStop x ≤ leftStop y :=
+  not_lt.1 fun hs ↦ by
+    obtain ⟨b, hb, hb'⟩ := exists_between hs
+    exact lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 hb')
+      (h.trans (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 hb)).le)
+
+theorem rightStop_le_leftStop_of_mem_leftMoves (h : y ∈ xᴸ) : rightStop y ≤ leftStop x :=
+  not_lt.1 fun hs ↦ by
+    obtain ⟨b, hb, hb'⟩ := exists_between hs
+    exact left_lf h ((lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 hb)).le.trans
+      (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 hb')).le)
+
+theorem rightStop_le_leftStop_of_mem_rightMoves (h : y ∈ xᴿ) : rightStop x ≤ leftStop y :=
+  not_lt.1 fun hs ↦ by
+    obtain ⟨b, hb, hb'⟩ := exists_between hs
+    exact lf_right h ((lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 hb)).le.trans
+      (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 hb')).le)
+
 @[simp]
-private theorem rightStop_toIGame (a : Dyadic) : rightStop a = a :=
-  rightStop_eq_of (fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).le)
+theorem rightStop_toIGame (a : Dyadic) : rightStop a = a :=
+  rightStop_eq_of_forall (fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).le)
     fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).not_ge
 
 @[simp]
-private theorem leftStop_toIGame (a : Dyadic) : leftStop a = a :=
-  leftStop_eq_of (fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).not_ge)
+theorem leftStop_toIGame (a : Dyadic) : leftStop a = a :=
+  leftStop_eq_of_forall (fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).not_ge)
     fun _ h ↦ (Dyadic.toIGame_lt_toIGame.2 h).le
 
 theorem rightStop_neg (x : IGame) [Short x] : rightStop (-x) = -leftStop x := by
-  refine rightStop_eq_of (fun b hb ↦ ?_) fun b hb ↦ ?_
+  refine rightStop_eq_of_forall (fun b hb ↦ ?_) fun b hb ↦ ?_
   · rw [IGame.le_neg, ← Dyadic.toIGame_neg]
     exact (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 (lt_neg.1 hb))).le
   · rw [← IGame.neg_le_neg_iff, neg_neg, ← Dyadic.toIGame_neg]
@@ -95,21 +116,44 @@ theorem rightStop_neg (x : IGame) [Short x] : rightStop (-x) = -leftStop x := by
 theorem leftStop_neg (x : IGame) [Short x] : leftStop (-x) = -rightStop x :=
   neg_eq_iff_eq_neg.1 (by simpa using (rightStop_neg (-x)).symm)
 
-private theorem leftStop_add_toIGame (x : IGame) [Short x] (a : Dyadic) :
+theorem rightStop_add_toIGame (x : IGame) [Short x] (a : Dyadic) :
+    rightStop (x + a) = rightStop x + a := by
+  refine rightStop_eq_of_forall (fun b hb ↦ ?_) fun b hb ↦ ?_
+  · rw [← IGame.sub_le_iff_le_add, ← (Dyadic.toIGame_sub_equiv b a).le_congr_left]
+    exact (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 (sub_lt_iff_lt_add.2 hb))).le
+  · rw [← IGame.sub_le_iff_le_add, ← (Dyadic.toIGame_sub_equiv b a).le_congr_left]
+    exact lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 (lt_sub_iff_add_lt.2 hb))
+
+theorem leftStop_add_toIGame (x : IGame) [Short x] (a : Dyadic) :
     leftStop (x + a) = leftStop x + a := by
-  refine leftStop_eq_of (fun b hb ↦ ?_) fun b hb ↦ ?_
+  refine leftStop_eq_of_forall (fun b hb ↦ ?_) fun b hb ↦ ?_
   · rw [← IGame.le_sub_iff_add_le, ← (Dyadic.toIGame_sub_equiv b a).le_congr_right]
     exact lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 (sub_lt_iff_lt_add.2 hb))
   · rw [← IGame.le_sub_iff_add_le, ← (Dyadic.toIGame_sub_equiv b a).le_congr_right]
     exact (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 (lt_sub_iff_add_lt.2 hb))).le
 
-private theorem rightStop_sub_toIGame (x : IGame) [Short x] (a : Dyadic) :
+theorem rightStop_sub_toIGame (x : IGame) [Short x] (a : Dyadic) :
     rightStop (x - a) = rightStop x - a := by
-  refine rightStop_eq_of (fun b hb ↦ ?_) fun b hb ↦ ?_
-  · rw [IGame.le_sub_iff_add_le, ← (Dyadic.toIGame_add_equiv b a).le_congr_left]
-    exact (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 (lt_sub_iff_add_lt.1 hb))).le
-  · rw [IGame.le_sub_iff_add_le, ← (Dyadic.toIGame_add_equiv b a).le_congr_left]
-    exact lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 (sub_lt_iff_lt_add.1 hb))
+  rw [rightStop_congr (y := x + (-a : Dyadic))
+    (.of_eq (by rw [Dyadic.toIGame_neg, sub_eq_add_neg])),
+    rightStop_add_toIGame, sub_eq_add_neg]
+
+theorem rightStop_add_rightStop_le (x y : IGame) [Short x] [Short y] :
+    rightStop x + rightStop y ≤ rightStop (x + y) := by
+  refine not_lt.1 fun h ↦ ?_
+  obtain ⟨c, hc, hc'⟩ := exists_between h
+  obtain ⟨a, ha, ha'⟩ := exists_between (sub_lt_iff_lt_add.2 hc')
+  refine lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 hc) ?_
+  rw [show c = a + (c - a) by linarith, (Dyadic.toIGame_add_equiv _ _).le_congr_left]
+  exact (add_lt_add (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 ha'))
+    (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 (sub_lt_comm.1 ha)))).le
+
+theorem leftStop_add_le (x y : IGame) [Short x] [Short y] :
+    leftStop (x + y) ≤ leftStop x + leftStop y := by
+  have := rightStop_add_rightStop_le (-x) (-y)
+  rw [rightStop_congr (neg_add x y).symm.antisymmRel, rightStop_neg, rightStop_neg,
+    rightStop_neg] at this
+  linarith
 
 /-- A short game is infinitely close to a number iff its stops agree. -/
 theorem leftStop_eq_rightStop_iff : leftStop x = rightStop x ↔
@@ -126,14 +170,14 @@ theorem leftStop_eq_rightStop_iff : leftStop x = rightStop x ↔
       refine lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 hb) ?_
       simpa using (ha (a - b) (sub_pos.2 hb')).1.le
 
-/-- If the right stops of the left options of `x` don't exceed the least left stop of its right
-options, the latter is the right stop of `x`. -/
-private theorem rightStop_eq_of_moves {a : Dyadic}
+/-- If some right option of `x` has left stop `a`, none has a smaller one, and some left option has
+right stop at least `a`, then `a` is the right stop of `x`. -/
+theorem rightStop_eq_of_moves {a : Dyadic}
     (h₁ : ∀ z ∈ xᴿ, ∀ [Short z], a ≤ leftStop z) (h₂ : ∃ z ∈ xᴿ, ∃ _ : Short z, leftStop z ≤ a)
     (h₃ : ∃ z ∈ xᴸ, ∃ _ : Short z, a ≤ rightStop z) : rightStop x = a := by
   obtain ⟨z, hz, _, hz'⟩ := h₂
   obtain ⟨y, hy, _, hy'⟩ := h₃
-  refine rightStop_eq_of (fun b hb ↦ le_iff_forall_lf.2 ⟨fun c hc ↦ ?_, fun w hw ↦ ?_⟩)
+  refine rightStop_eq_of_forall (fun b hb ↦ le_iff_forall_lf.2 ⟨fun c hc ↦ ?_, fun w hw ↦ ?_⟩)
     fun b hb ↦ ?_
   · have := (Numeric.left_lt hc).le.trans (lt_of_lt_rightStop
       (Dyadic.toIGame_lt_toIGame.2 (hb.trans_le hy'))).le
@@ -144,7 +188,7 @@ private theorem rightStop_eq_of_moves {a : Dyadic}
       (Dyadic.toIGame_lt_toIGame.2 (hz'.trans_lt hb))).le.trans h)
 
 /-- A short game which some dyadic fits in has equal stops. -/
-private theorem leftStop_eq_rightStop_of_fits {a : Dyadic} (h : Fits a x) :
+theorem leftStop_eq_rightStop_of_fits {a : Dyadic} (h : Fits a x) :
     leftStop x = rightStop x := by
   obtain ⟨z, hz, hzx⟩ := h.exists_wsubposition_equiv
   have : Short z := by
@@ -603,7 +647,7 @@ private theorem cool_le_cool_aux (x y : IGame) [Short x] [Short y] (t : 𝔻≥-
     obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 ((le_max_right _ _).trans hs.ge))
     rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
     exact hn.ge.trans (h.trans hm.le)
-  · have := rightStop_mono <| cool_le_cool_of_hot IH hs (by
+  · have := rightStop_le_rightStop <| cool_le_cool_of_hot IH hs (by
       obtain e | e := max_choice (temperature x) (temperature y)
       exacts [.inl ⟨e ▸ hs, e.le⟩, .inr ⟨e ▸ hs, e.le⟩]) h
     rwa [rightStop_cool, rightStop_cool, wall_apply_of_temperature_le (le_max_left _ _),
@@ -645,9 +689,214 @@ theorem mean_congr (h : x ≈ y) : mean x = mean y := by
 
 /-! ### Additivity -/
 
+private theorem cool_eq_of_eq {a b : IGame} [Short a] [Short b] (h : a = b) :
+    cool a t = cool b t := by
+  subst h; rfl
+
+private theorem tax_eq_of_eq {a b : IGame} [Short a] [Short b] (h : a = b) :
+    tax a t = tax b t := by
+  subst h; rfl
+
+private theorem lf_of_leftStop_lt_leftStop (h : leftStop x < leftStop y) : x ⧏ y :=
+  fun h' ↦ (leftStop_le_leftStop h').not_gt h
+
+private theorem cool_sub_lf_cool (hb : ⊥ < t) {y : IGame} [Short y] (hy : y ∈ xᴸ) :
+    cool y t - (t : Dyadic) ⧏ cool x t := by
+  by_cases hx : ⊥ < temperature x ∧ t ≤ temperature x
+  · rw [cool_of_le_temperature (forall_not_equiv_of_bot_lt hx.1) hx.2]
+    exact left_lf (by rw [leftMoves_tax]; exact ⟨⟨y, hy⟩, rfl⟩)
+  · rw [cool_of_not_hot hx]
+    exact cool_sub_lf_mean hb (temperature_lt_of_not_hot hb hx) hy
+
+private theorem exists_leftStop_cool (h : ⊥ < temperature x ∧ t ≤ temperature x) :
+    ∃ y ∈ xᴸ, ∃ _ : Short y, rightStop (cool y t) - t = leftStop (cool x t) := by
+  have h' := forall_not_equiv_of_bot_lt h.1
+  obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h' left) t
+  refine ⟨y, hy, inferInstance, ?_⟩
+  rw [leftStop_cool, wall_apply_of_le_temperature h' h.2, e, rightStop_cool, neg_left, neg_sub]
+
+private theorem exists_rightStop_cool (h : ⊥ < temperature x ∧ t ≤ temperature x) :
+    ∃ y ∈ xᴿ, ∃ _ : Short y, leftStop (cool y t) + t = rightStop (cool x t) := by
+  have h' := forall_not_equiv_of_bot_lt h.1
+  obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h' right) t
+  refine ⟨y, hy, inferInstance, ?_⟩
+  rw [rightStop_cool, wall_apply_of_le_temperature h' h.2, e, leftStop_cool, neg_right,
+    neg_add_eq_sub]
+
+/-- The induction hypothesis for `cool_add`. -/
+private def CoolAddIH (x y : IGame) : Prop :=
+  ∀ x' y' : IGame, [Short x'] → [Short y'] → birthday x' + birthday y' < birthday x + birthday y →
+    ∀ t : 𝔻≥-1, ⊥ < t → cool (x' + y') t ≈ cool x' t + cool y' t
+
+omit [Short x] [Short y] in
+private theorem CoolAddIH.neg (IH : CoolAddIH x y) : CoolAddIH (-x) (-y) :=
+  fun x' y' _ _ h ↦ IH x' y' (by rwa [birthday_neg, birthday_neg] at h)
+
+omit [Short x] [Short y] in
+private theorem CoolAddIH.swap (IH : CoolAddIH x y) : CoolAddIH y x :=
+  fun x' y' _ _ h ↦ IH x' y' (by rwa [add_comm (birthday y)] at h)
+
+/-- Half of `tax (x + y) t ≈ cool x t + cool y t`, while `y` is hot. -/
+private theorem tax_add_left (IH : CoolAddIH x y) (hb : ⊥ < t)
+    (hy : ⊥ < temperature y ∧ t ≤ temperature y) :
+    (∀ a ∈ (tax (x + y) t)ᴸ, a ⧏ cool x t + cool y t) ∧
+    (∀ b ∈ (cool x t + cool y t)ᴸ, b ⧏ tax (x + y) t) := by
+  have hY := cool_of_le_temperature (forall_not_equiv_of_bot_lt hy.1) hy.2
+  have hl {a : IGame} [Short a] (ha : a ∈ xᴸ) : cool (a + y) t - (t : Dyadic) ≈
+      cool a t - (t : Dyadic) + cool y t := Game.mk_eq_mk.1 <| by
+    simp only [Game.mk_sub, Game.mk_add, Game.mk_eq_mk.2 (IH a y (add_lt_add_left
+      (birthday_lt_of_mem_moves ha) _) t hb), add_sub_right_comm]
+  have hr {b : IGame} [Short b] (hb' : b ∈ yᴸ) : cool (x + b) t - (t : Dyadic) ≈
+      cool x t + (cool b t - (t : Dyadic)) := Game.mk_eq_mk.1 <| by
+    simp only [Game.mk_sub, Game.mk_add, Game.mk_eq_mk.2 (IH x b (add_lt_add_right
+      (birthday_lt_of_mem_moves hb') _) t hb), add_sub_assoc]
+  have hT {w : IGame} [Short w] (hw : w ∈ (x + y)ᴸ) :
+      cool w t - (t : Dyadic) ⧏ tax (x + y) t :=
+    left_lf (by rw [leftMoves_tax]; exact ⟨⟨w, hw⟩, rfl⟩)
+  constructor
+  · rw [leftMoves_tax]
+    rintro _ ⟨⟨w, hw⟩, rfl⟩
+    rw [moves_add] at hw
+    obtain ⟨a, ha, rfl⟩ | ⟨b, hb', rfl⟩ := hw
+    · have := Short.of_mem_moves ha
+      exact (hl ha).le_congr_right.not.2 fun h ↦ cool_sub_lf_cool hb ha (le_of_add_le_add_right h)
+    · have := Short.of_mem_moves hb'
+      exact (hr hb').le_congr_right.not.2 fun h ↦ cool_sub_lf_cool hb hb' (le_of_add_le_add_left h)
+  · intro v hv
+    simp only [moves_add, Set.mem_union, Set.mem_image] at hv
+    obtain ⟨a, ha, rfl⟩ | ⟨b, hb', rfl⟩ := hv
+    · by_cases hx : ⊥ < temperature x ∧ t ≤ temperature x
+      · rw [cool_of_le_temperature (forall_not_equiv_of_bot_lt hx.1) hx.2, leftMoves_tax] at ha
+        obtain ⟨⟨a, ha⟩, rfl⟩ := ha
+        have := Short.of_mem_moves ha
+        exact (hl ha).le_congr_right.not.1 (hT (add_right_mem_moves_add ha y))
+      · rw [cool_of_not_hot hx] at ha
+        obtain rfl := Dyadic.eq_lower_of_mem_leftMoves_toIGame ha
+        obtain ⟨b, hb', _, e⟩ := exists_leftStop_cool hy
+        refine lf_of_leftStop_lt_leftStop ((rightStop_le_leftStop_of_mem_leftMoves
+          (by rw [leftMoves_tax]; exact ⟨⟨_, add_left_mem_moves_add hb' x⟩, rfl⟩)).trans_lt' ?_)
+        have h₁ := rightStop_add_rightStop_le (cool x t) (cool b t)
+        rw [← rightStop_congr (IH x b (add_lt_add_right (birthday_lt_of_mem_moves hb') _) t hb),
+          rightStop_congr (cool_of_not_hot hx).antisymmRel, rightStop_toIGame] at h₁
+        rw [leftStop_congr (add_comm _ _).antisymmRel, leftStop_add_toIGame,
+          rightStop_sub_toIGame]
+        have := Dyadic.lower_lt (mean x)
+        linarith
+    · rw [hY, leftMoves_tax] at hb'
+      obtain ⟨⟨b, hb'⟩, rfl⟩ := hb'
+      have := Short.of_mem_moves hb'
+      exact (hr hb').le_congr_right.not.1 (hT (add_left_mem_moves_add hb' x))
+
+private theorem tax_add_equiv (IH : CoolAddIH x y) (hb : ⊥ < t)
+    (hy : ⊥ < temperature y ∧ t ≤ temperature y) :
+    tax (x + y) t ≈ cool x t + cool y t := by
+  obtain ⟨hl₁, hl₂⟩ := tax_add_left IH hb hy
+  obtain ⟨hr₁, hr₂⟩ := tax_add_left IH.neg hb (by rwa [temperature_neg])
+  rw [tax_eq_of_eq (neg_add x y).symm, tax_neg, cool_neg, cool_neg, ← neg_add] at hr₁ hr₂
+  refine equiv_of_forall_lf hl₁ (fun u hu ↦ ?_) hl₂ fun v hv ↦ ?_
+  · have := hr₁ (-u) (by simpa using hu)
+    rwa [IGame.neg_le_neg_iff] at this
+  · have := hr₂ (-v) (by rw [moves_neg, neg_left, Set.neg_mem_neg]; exact hv)
+    rwa [IGame.neg_le_neg_iff] at this
+
+private theorem fits_mean_tax (hb : ⊥ < t) (ht : temperature x < t) : Fits (mean x) (tax x t) := by
+  refine ⟨fun v hv ↦ ?_, fun u hu ↦ ?_⟩
+  · rw [leftMoves_tax] at hv
+    obtain ⟨⟨y, hy⟩, rfl⟩ := hv
+    have := Short.of_mem_moves hy
+    exact cool_sub_lf_mean hb ht hy
+  · rw [rightMoves_tax] at hu
+    obtain ⟨⟨z, hz⟩, rfl⟩ := hu
+    have := Short.of_mem_moves hz
+    exact mean_lf_cool_add hb ht hz
+
+/-- While `y` is hot, the only dyadic that fits in `tax (x + y) t` is
+`leftStop (cool x t) + rightStop (cool y t)`. -/
+private theorem eq_of_fits_tax_add (IH : CoolAddIH x y) (hb : ⊥ < t)
+    (hy : ⊥ < temperature y ∧ t ≤ temperature y) {a : Dyadic} (h : Fits a (tax (x + y) t)) :
+    a = leftStop (cool x t) + rightStop (cool y t) := by
+  have hR {b : IGame} [Short b] (hb' : b ∈ yᴸ) :
+      rightStop (cool x t) + rightStop (cool b t) - t ≤ a := by
+    have := rightStop_le_of_lf (h.1 _ (by
+      rw [leftMoves_tax]; exact ⟨⟨_, add_left_mem_moves_add hb' x⟩, rfl⟩))
+    rw [rightStop_sub_toIGame, rightStop_congr (IH x b (add_lt_add_right
+      (birthday_lt_of_mem_moves hb') _) t hb)] at this
+    linarith [rightStop_add_rightStop_le (cool x t) (cool b t)]
+  refine le_antisymm ?_ ?_
+  · obtain ⟨z, hz, _, e⟩ := exists_rightStop_cool hy
+    have := le_leftStop_of_lf (h.2 _ (by
+      rw [rightMoves_tax]; exact ⟨⟨_, add_left_mem_moves_add hz x⟩, rfl⟩))
+    rw [leftStop_add_toIGame, leftStop_congr (IH x z (add_lt_add_right
+      (birthday_lt_of_mem_moves hz) _) t hb)] at this
+    linarith [leftStop_add_le (cool x t) (cool z t)]
+  · by_cases hx : ⊥ < temperature x ∧ t ≤ temperature x
+    · obtain ⟨w, hw, _, e⟩ := exists_leftStop_cool hx
+      have := rightStop_le_of_lf (h.1 _ (by
+        rw [leftMoves_tax]; exact ⟨⟨_, add_right_mem_moves_add hw y⟩, rfl⟩))
+      rw [rightStop_sub_toIGame, rightStop_congr (IH w y (add_lt_add_left
+        (birthday_lt_of_mem_moves hw) _) t hb)] at this
+      linarith [rightStop_add_rightStop_le (cool w t) (cool y t)]
+    · obtain ⟨b, hb', _, e⟩ := exists_leftStop_cool hy
+      have := hR hb'
+      have hx' : cool x t ≈ mean x := (cool_of_not_hot hx).antisymmRel
+      rw [leftStop_congr hx', leftStop_toIGame]
+      rw [rightStop_congr hx', rightStop_toIGame] at this
+      linarith [rightStop_le_leftStop (cool y t)]
+
+private theorem cool_add_of_le (IH : CoolAddIH x y) (hb : ⊥ < t)
+    (hxy : temperature x ≤ temperature y) : cool (x + y) t ≈ cool x t + cool y t := by
+  obtain hy | hy := (bot_le : ⊥ ≤ temperature y).eq_or_lt
+  · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 (hxy.trans hy.ge))
+    obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 hy.symm
+    rw [cool_of_equiv hn, cool_of_equiv hm,
+      cool_of_equiv ((add_congr hn hm).trans (intCast_add_equiv n m).symm)]
+    exact intCast_add_equiv n m
+  have key {t : 𝔻≥-1} (hb : ⊥ < t) (ht : t ≤ temperature y) :
+      cool (x + y) t ≈ cool x t + cool y t := by
+    have H := tax_add_equiv IH hb ⟨hy, ht⟩
+    by_cases hs : ⊥ < temperature (x + y) ∧ t ≤ temperature (x + y)
+    · rwa [cool_of_le_temperature (forall_not_equiv_of_bot_lt hs.1) hs.2]
+    have hf := fits_mean_tax hb (temperature_lt_of_not_hot hb hs)
+    obtain ⟨z, hz, hzT⟩ := hf.exists_wsubposition_equiv
+    have : Short z := by
+      obtain rfl | hz := wsubposition_iff_eq_or_subposition.1 hz
+      exacts [inferInstance, .subposition hz]
+    have := Numeric.wsubposition hz
+    have hd := (equiv_toIGame_toDyadic z).symm.trans hzT
+    rw [cool_of_not_hot hs, (eq_of_fits_tax_add IH hb ⟨hy, ht⟩ hf).trans
+      (eq_of_fits_tax_add IH hb ⟨hy, ht⟩ (fits_of_equiv hd)).symm]
+    exact hd.trans H
+  obtain ht | ht := le_or_gt t (temperature y)
+  · exact key hb ht
+  have E := key hy le_rfl
+  have h₁ := rightStop_add_rightStop_le (cool x (temperature y)) (cool y (temperature y))
+  have h₂ := leftStop_add_le (cool x (temperature y)) (cool y (temperature y))
+  have h₃ := rightStop_le_leftStop (cool (x + y) (temperature y))
+  rw [← rightStop_congr E] at h₁
+  rw [← leftStop_congr E] at h₂
+  simp only [rightStop_cool, leftStop_cool, wall_apply_of_temperature_le hxy,
+    wall_apply_of_temperature_le le_rfl, Player.cases, neg_neg] at h₁ h₂ h₃
+  have hτ : temperature (x + y) ≤ temperature y := temperature_le_iff.2 (by linarith)
+  have hm : mean (x + y) = mean x + mean y := by
+    have : wall right (x + y) (temperature y) = mean (x + y) := wall_apply_of_temperature_le hτ
+    linarith
+  rw [cool_of_temperature_lt (hτ.trans_lt ht), cool_of_temperature_lt (hxy.trans_lt ht),
+    cool_of_temperature_lt ht, hm]
+  exact Dyadic.toIGame_add_equiv _ _
+
+private theorem cool_add_aux (x y : IGame) [Short x] [Short y] (t : 𝔻≥-1) (hb : ⊥ < t) :
+    cool (x + y) t ≈ cool x t + cool y t := by
+  have IH : CoolAddIH x y := fun x' y' _ _ _ t hb ↦ cool_add_aux x' y' t hb
+  obtain h | h := le_total (temperature x) (temperature y)
+  · exact cool_add_of_le IH hb h
+  · rw [cool_eq_of_eq (add_comm x y), add_comm (cool x t)]
+    exact cool_add_of_le IH.swap hb h
+termination_by birthday x + birthday y
+
+/-- Cooling by `t > -1` is additive (Bando, Ken and Morikawa, Theorem 12). -/
 theorem cool_add (ht : ⊥ < t) (x y : IGame) [Short x] [Short y] :
     cool (x + y) t ≈ cool x t + cool y t :=
-  sorry
+  cool_add_aux x y t ht
 
 theorem mean_add (x y : IGame) [Short x] [Short y] : mean (x + y) = mean x + mean y := by
   let τ := max (temperature (x + y)) (max (temperature x) (temperature y))
