@@ -259,23 +259,19 @@ theorem crossing_comm (f g : Trajectory) : crossing f g = crossing g f :=
 /-- If `f + g` starts out nonpositive, it vanishes where it first becomes nonnegative. -/
 theorem add_eq_zero_of_crossing_eq (h : crossing f g = t) (h₀ : f ⊥ + g ⊥ ≤ 0) :
     f t + g t = 0 := by
-  have ht := crossing_le_iff.1 h.le
-  refine le_antisymm (not_lt.1 fun hpos ↦ ?_) ht
+  refine le_antisymm (not_lt.1 fun hpos ↦ ?_) (crossing_le_iff.1 h.le)
+  obtain rfl | ht := eq_bot_or_bot_lt t
+  · linarith
   have hm : Dyadic.half * (f t + g t) + .half * (f t + g t) = f t + g t := by
     rw [← add_mul, show Dyadic.half + .half = 1 by decide, one_mul]
   set s := projIci (-1) (t - .half * (f t + g t))
   have hs : (s : Dyadic) = max (-1) (t - .half * (f t + g t)) := coe_projIci ..
-  have hst : s ≤ t := by
-    rw [← Subtype.coe_le_coe, hs]
-    exact max_le t.2 (by linarith)
-  have hts : t ≤ s := WithTop.coe_le_coe.1 <| h ▸ crossing_le_iff.2 (by
-    linarith [f.apply_le_apply_add hst, g.apply_le_apply_add hst,
-      le_max_right (-1 : Dyadic) (t - .half * (f t + g t))])
-  have e := congrArg Subtype.val (hts.antisymm hst)
-  obtain h₁ | h₁ := max_choice (-1 : Dyadic) (t - .half * (f t + g t)) <;> rw [hs, h₁] at e
-  · obtain rfl : t = ⊥ := Subtype.ext e
-    linarith
-  · linarith
+  have hst : s < t := by
+    rw [← Subtype.coe_lt_coe, hs]
+    exact max_lt (Subtype.coe_lt_coe.2 ht) (by linarith)
+  refine (crossing_le_iff.2 ?_).not_gt (h ▸ WithTop.coe_lt_coe.2 hst)
+  linarith [f.apply_le_apply_add hst.le, g.apply_le_apply_add hst.le,
+    le_max_right (-1 : Dyadic) (t - .half * (f t + g t))]
 
 /-- The trajectory `t ↦ f (min t τ)`, which follows `f` until time `τ`, and is then constant. -/
 def freeze (f : Trajectory) : WithTop 𝔻≥-1 → Trajectory
@@ -290,6 +286,22 @@ theorem freeze_apply (f : Trajectory) (τ t : 𝔻≥-1) : f.freeze τ t = f (mi
 @[simp]
 theorem freeze_apply_bot (f : Trajectory) (τ : WithTop 𝔻≥-1) : f.freeze τ ⊥ = f ⊥ := by
   induction τ using WithTop.recTopCoe <;> simp [freeze_apply]
+
+@[simp]
+theorem crossing_freeze (f g : Trajectory) :
+    crossing (f.freeze (crossing f g)) (g.freeze (crossing f g)) = crossing f g := by
+  generalize h : crossing f g = c
+  induction c using WithTop.recTopCoe with
+  | top => exact h
+  | coe τ =>
+    refine eq_of_forall_ge_iff fun c ↦ ?_
+    induction c using WithTop.recTopCoe with
+    | top => simp
+    | coe t =>
+      rw [crossing_le_iff, freeze_apply, freeze_apply, WithTop.coe_le_coe]
+      obtain ht | ht := le_total t τ
+      · rw [min_eq_left ht, ← crossing_le_iff, h, WithTop.coe_le_coe]
+      · simpa [min_eq_right ht, ht] using crossing_le_iff.1 h.le
 
 -- The scaffolds of `⋆` meet at `0`, and those of `½` at `-½`.
 example : crossing (reflect (const 0)) (reflect (const 0)) = ↑(⟨0, by decide⟩ : 𝔻≥-1) := rfl

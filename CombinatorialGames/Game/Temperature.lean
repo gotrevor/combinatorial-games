@@ -5,13 +5,14 @@ Authors: Trevor Morris
 -/
 module
 
+public import CombinatorialGames.Game.Classes
 public import CombinatorialGames.Game.Trajectory
-public import CombinatorialGames.Surreal.Basic
 
+import CombinatorialGames.Surreal.Basic
 import CombinatorialGames.Tactic.GameCmp
-import Mathlib.Data.Fintype.Order
-import Mathlib.Data.Set.Finite.Lattice
-import Mathlib.Tactic.Linarith -- shake: keep
+import Mathlib.Order.Filter.AtTopBot.Basic
+import Mathlib.Order.Filter.Finite
+import Mathlib.Tactic.IntervalCases
 
 /-!
 # Temperature
@@ -53,29 +54,20 @@ walls, temperature and mean only depend on the value of `x`:
 
 public noncomputable section
 
-open Player Trajectory
+open Filter Player Trajectory
 
 universe u
 
 namespace IGame
 
-theorem exists_eq_intCast_of_wsubposition {n : ℤ} {x : IGame} (h : WSubposition x n) :
-    ∃ m : ℤ, x = m := by
-  generalize hy : (n : IGame) = y at h
-  induction y using moveRecOn generalizing n with | ind y ih
-  obtain rfl | h := wsubposition_iff_eq_or_subposition.1 h
-  · exact ⟨n, hy.symm⟩
-  obtain ⟨p, z, hz, hxz⟩ := subposition_iff_exists.1 h
-  subst hy
-  cases p
-  · exact ih _ z hz (eq_sub_one_of_mem_leftMoves_intCast hz).symm hxz
-  · exact ih _ z hz (eq_add_one_of_mem_rightMoves_intCast hz).symm hxz
-
-/-- If an integer fits within `x`, then `x` equals an integer. -/
-theorem Fits.exists_intCast_equiv {n : ℤ} {x : IGame} (h : Fits n x) : ∃ m : ℤ, x ≈ m := by
-  obtain ⟨y, hy, hyx⟩ := h.exists_wsubposition_equiv
-  obtain ⟨m, rfl⟩ := exists_eq_intCast_of_wsubposition hy
-  exact ⟨m, hyx.symm⟩
+private theorem intCast_le_of_forall_lf {x : IGame} (h : ∀ m : ℤ, ¬ x ≈ m) {n : ℤ}
+    (hn : ∀ y ∈ xᴿ, n ⧏ y) : n ≤ x := by
+  refine le_iff_forall_lf.2 ⟨fun z hz hxz ↦ ?_, hn⟩
+  by_cases! hf : ∀ y ∈ xᴸ, y ⧏ n
+  · obtain ⟨m, hm⟩ := Fits.exists_intCast_equiv ⟨hf, hn⟩
+    exact h m hm
+  · obtain ⟨y, hy, hny⟩ := hf
+    exact left_lf hy (hxz.trans ((Numeric.left_lt hz).le.trans hny))
 
 /-- A short game which isn't equal to any integer has both left and right options. -/
 theorem nonempty_moves_of_forall_not_equiv {x : IGame} [Short x] (h : ∀ n : ℤ, ¬ x ≈ n)
@@ -87,18 +79,7 @@ theorem nonempty_moves_of_forall_not_equiv {x : IGame} [Short x] (h : ∀ n : �
   intro x _ h
   by_contra! hx
   obtain ⟨n, hn⟩ := Short.exists_lt_natCast x
-  obtain ⟨m, hm⟩ := Fits.exists_intCast_equiv (n := n)
-    ⟨fun y hy hny ↦ left_lf hy (hn.le.trans hny), by simp [hx]⟩
-  exact h m hm
-
-private theorem intCast_le_of_forall_lf {x : IGame} (h : ∀ m : ℤ, ¬ x ≈ m) {n : ℤ}
-    (hn : ∀ y ∈ xᴿ, n ⧏ y) : n ≤ x := by
-  refine le_iff_forall_lf.2 ⟨fun z hz hxz ↦ ?_, hn⟩
-  by_cases! hf : ∀ y ∈ xᴸ, y ⧏ n
-  · obtain ⟨m, hm⟩ := Fits.exists_intCast_equiv ⟨hf, hn⟩
-    exact h m hm
-  · obtain ⟨y, hy, hny⟩ := hf
-    exact left_lf hy (hxz.trans ((Numeric.left_lt hz).le.trans hny))
+  exact hn.not_ge (by simpa using intCast_le_of_forall_lf h (n := n) (by simp [hx]))
 
 /-! ### Walls and scaffolds -/
 
@@ -153,13 +134,12 @@ theorem scaffold_of_moves_eq_singleton (h : x.moves p = {y}) :
     scaffold p x = reflect (wall (-p) y) := by
   refine Trajectory.ext fun t ↦ ?_
   obtain ⟨z, hz, _, e⟩ := exists_scaffold_apply_eq (h ▸ Set.singleton_nonempty y) t
-  rw [h, Set.mem_singleton_iff] at hz
-  subst hz
+  obtain rfl : z = y := by simpa [h] using hz
   exact e
 
 theorem wall_of_equiv {n : ℤ} (h : x ≈ n) : wall p x = const (p.cases (-n) n) := by
   have h' : ∃ n : ℤ, x ≈ n := ⟨n, h⟩
-  rw [wall, dite_eq_left h', IGame.intCast_equiv.1 (h'.choose_spec.symm.trans h)]
+  rw [wall, dite_eq_left h', intCast_equiv.1 (h'.choose_spec.symm.trans h)]
 
 theorem wall_intCast (p : Player) (n : ℤ) : wall p n = const (p.cases (-n) n) :=
   wall_of_equiv .rfl
@@ -176,10 +156,8 @@ private theorem scaffold_neg_aux (H : ∀ y ∈ x.moves (-p), ∀ [Short y], wal
       rw [e, neg_neg, ← H y hy]
       exact scaffold_apply_le (by simpa) t
     · obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (p := p) (x := -x) (by simpa) t
-      have := H (-y) (by simpa using hy)
-      simp only [neg_neg] at this
-      have h' := scaffold_apply_le (p := -p) (y := -y) (by simpa using hy) t
-      rwa [neg_neg, ← this, ← e] at h'
+      simpa [e, ← H (-y) (by simpa using hy)] using
+        scaffold_apply_le (p := -p) (y := -y) (by simpa using hy) t
   · rw [scaffold, scaffold, dite_eq_right (by simpa), dite_eq_right h]
 
 theorem wall_neg (p : Player) (x : IGame) [Short x] : wall p (-x) = wall (-p) x := by
@@ -200,40 +178,28 @@ theorem scaffold_neg (p : Player) (x : IGame) [Short x] : scaffold p (-x) = scaf
 /-! ### Temperature and mean -/
 
 /-- At `t = -1`, the right wall of `x` is the greatest integer `n ≤ x`. -/
-private theorem wall_right_bot_aux (x : IGame) [Short x]
-    (IH : ∀ y ∈ xᴿ, ∀ [Short y], ∃ k : ℤ, wall right (-y) ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ -y) :
+private theorem wall_right_bot (x : IGame) [Short x] :
     ∃ k : ℤ, wall right x ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ x := by
   by_cases! h : ∃ n : ℤ, x ≈ n
   · obtain ⟨m, hm⟩ := h
     exact ⟨m, by simp [wall_of_equiv hm], fun n ↦ by simp [hm.le_congr_right]⟩
-  obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h right) ⊥
-  obtain ⟨k, hk, hk'⟩ := IH y hy
-  have hx : scaffold right x ⊥ = -1 - k := by
-    rw [e, ← wall_neg, hk]
-    rfl
-  refine ⟨-1 - k, by simp [wall_of_forall_not_equiv h, hx], fun n ↦ ⟨fun hn ↦ ?_, fun hn ↦ ?_⟩⟩
-  · refine intCast_le_of_forall_lf h fun z hz hzn ↦ ?_
-    have := Short.of_mem_moves hz
-    obtain ⟨l, hl, hl'⟩ := IH z hz
-    have h₁ := scaffold_apply_le hz ⊥
-    rw [hx, ← wall_neg, hl] at h₁
-    have h₂ := (hl' (-n)).2 (by simpa)
-    have : (l : Dyadic) ≤ k := by change _ ≤ (-1 : Dyadic) - l at h₁; linarith
-    have := Int.cast_le.1 this
+  have H (y) (hy : y ∈ xᴿ) [Short y] :
+      ∃ k : ℤ, -1 - wall left y ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ⧏ y := by
+    obtain ⟨k, hk, hk'⟩ := wall_right_bot (-y)
+    refine ⟨-1 - k, by rw [← neg_right, ← wall_neg, hk]; push_cast; rfl, fun n ↦ ?_⟩
+    rw [← IGame.neg_le_neg_iff, ← intCast_neg, ← hk']
     omega
-  · by_contra! hlt
-    exact lf_right hy (hn.trans' (by simpa using (hk' (-n)).1 (by omega)))
-
-private theorem wall_right_bot (x : IGame) [Short x] :
-    ∃ k : ℤ, wall right x ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ x := by
-  suffices ∀ x [Short x], (∃ k : ℤ, wall right x ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ x) ∧
-      ∃ k : ℤ, wall right (-x) ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ -x from (this x).1
-  intro x _
-  induction x using moveRecOn generalizing ‹x.Short› with | ind x ih
-  refine ⟨wall_right_bot_aux x fun y hy _ ↦ (ih _ y hy).2, wall_right_bot_aux (-x) fun y hy _ ↦ ?_⟩
-  rw [moves_neg, Set.mem_neg] at hy
-  have := Short.of_mem_moves hy
-  simpa using (ih _ _ hy).1
+  obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h right) ⊥
+  obtain ⟨k, hk, hk'⟩ := H y hy
+  refine ⟨k, by rw [wall_of_forall_not_equiv h, freeze_apply_bot, e, ← hk]; rfl,
+    fun n ↦ ⟨fun hn ↦ intCast_le_of_forall_lf h fun z hz ↦ ?_, fun hn ↦ ?_⟩⟩
+  · have := Short.of_mem_moves hz
+    obtain ⟨l, hl, hl'⟩ := H z hz
+    have := (e.symm.trans_le (scaffold_apply_le hz ⊥)).trans_eq hl
+    exact (hl' n).1 (hn.trans (Int.cast_le.1 (hk ▸ this)))
+  · exact (hk' n).2 fun h ↦ lf_right hy (h.trans hn)
+termination_by x.birthday
+decreasing_by exact (birthday_neg y).trans_lt (birthday_lt_of_mem_moves hy)
 
 /-- At `t = -1`, the walls of a game which isn't equal to an integer haven't met yet. -/
 private theorem wall_bot_add_neg (h : ∀ n : ℤ, ¬ x ≈ n) : wall left x ⊥ + wall right x ⊥ < 0 := by
@@ -246,56 +212,28 @@ private theorem wall_bot_add_neg (h : ∀ n : ℤ, ¬ x ≈ n) : wall left x ⊥
   exact h k ⟨by simpa using (hl' (-k)).1 (by omega), (hk' k).1 le_rfl⟩
 
 private theorem crossing_scaffold_ne_top_aux (h : ∀ n : ℤ, ¬ x ≈ n)
-    (H : ∀ p, ∀ y ∈ x.moves p, ∀ [Short y], ∃ C, ∀ q t, wall q y t ≤ C) :
+    (H : ∀ p, ∀ y ∈ x.moves p, ∀ [Short y], ∀ᶠ C in atTop, ∀ t, wall (-p) y t ≤ C) :
     crossing (scaffold left x) (scaffold right x) ≠ ⊤ := by
-  have (y : ⋃ p, x.moves p) : ∃ C, ∀ p (hy : y.1 ∈ x.moves p) t,
-      (have := Short.of_mem_moves hy; wall (-p) y t) ≤ C := by
-    obtain ⟨p, hp⟩ := Set.mem_iUnion.1 y.2
-    have := Short.of_mem_moves hp
-    exact (H p y hp).imp fun _ h _ _ ↦ h _
-  choose C hC using this
-  obtain ⟨M, hM⟩ := Finite.exists_le C
-  have hS (p : Player) : Set.projIci (-1) M - M ≤ scaffold p x (Set.projIci (-1) M) := by
+  have := fun p (y : x.moves p) ↦ Short.of_mem_moves y.2
+  obtain ⟨M, hM, hC⟩ := ((eventually_ge_atTop (-1 : Dyadic)).and <|
+    eventually_all.2 fun p ↦ eventually_all.2 fun y : x.moves p ↦ H p y y.2).exists
+  have hS (p) : 0 ≤ scaffold p x ⟨M, hM⟩ := by
     obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h p) _
-    linarith [hC ⟨y, Set.mem_iUnion_of_mem p hy⟩ p hy (Set.projIci (-1) M),
-      hM ⟨y, Set.mem_iUnion_of_mem p hy⟩]
-  have : M ≤ Set.projIci (-1) M := (le_max_right ..).trans_eq (Set.coe_projIci ..).symm
-  exact ne_top_of_le_ne_top WithTop.coe_ne_top (crossing_le_iff.2 (by linarith [hS left, hS right]))
+    exact e ▸ sub_nonneg.2 (hC p ⟨y, hy⟩ _)
+  exact ne_top_of_le_ne_top WithTop.coe_ne_top (crossing_le_iff.2 (add_nonneg (hS _) (hS _)))
 
-private theorem exists_wall_le (x : IGame) [Short x] : ∃ C, ∀ p t, wall p x t ≤ C := by
-  induction x using moveRecOn generalizing ‹x.Short› with | ind x ih
+private theorem eventually_wall_le (p : Player) (x : IGame) [Short x] :
+    ∀ᶠ C in atTop, ∀ t, wall p x t ≤ C := by
+  induction x using moveRecOn generalizing ‹x.Short› p with | ind x ih
   by_cases! h : ∃ n : ℤ, x ≈ n
   · obtain ⟨n, hn⟩ := h
-    exact ⟨max (-n) n, fun p t ↦ by cases p <;> simp [wall_of_equiv hn]⟩
-  obtain ⟨τ, hτ⟩ :=
-    WithTop.ne_top_iff_exists.1 (crossing_scaffold_ne_top_aux h fun p y hy _ ↦ ih p y hy)
-  refine ⟨max (scaffold left x τ) (scaffold right x τ), fun p t ↦ ?_⟩
-  rw [wall_of_forall_not_equiv h, ← hτ, freeze_apply]
-  cases p
-  · exact ((scaffold _ x).monotone (min_le_right _ _)).trans (le_max_left ..)
-  · exact ((scaffold _ x).monotone (min_le_right _ _)).trans (le_max_right ..)
-
-/-- The scaffolds of a game which isn't equal to an integer meet, with equal values. -/
-private theorem exists_crossing_scaffold (h : ∀ n : ℤ, ¬ x ≈ n) : ∃ τ : 𝔻≥-1,
-    crossing (scaffold left x) (scaffold right x) = τ ∧
-      scaffold left x τ + scaffold right x τ = 0 := by
+    filter_upwards [eventually_ge_atTop (wall p x ⊥)] with C hC t
+    simpa [wall_of_equiv hn] using hC
   obtain ⟨τ, hτ⟩ := WithTop.ne_top_iff_exists.1 <|
-    crossing_scaffold_ne_top_aux h fun _ y _ _ ↦ exists_wall_le y
-  refine ⟨τ, hτ.symm, add_eq_zero_of_crossing_eq hτ.symm ?_⟩
-  simpa [wall_of_forall_not_equiv h] using (wall_bot_add_neg h).le
-
-private theorem crossing_wall_of_forall_not_equiv (h : ∀ n : ℤ, ¬ x ≈ n) :
-    crossing (wall left x) (wall right x) = crossing (scaffold left x) (scaffold right x) := by
-  obtain ⟨τ, hτ, hs⟩ := exists_crossing_scaffold h
-  rw [wall_of_forall_not_equiv h, wall_of_forall_not_equiv h, hτ]
-  refine eq_of_forall_ge_iff fun c ↦ ?_
-  induction c using WithTop.recTopCoe with
-  | top => simp
-  | coe c =>
-    rw [crossing_le_iff, freeze_apply, freeze_apply, WithTop.coe_le_coe]
-    obtain hc | hc := le_total c τ
-    · rw [min_eq_left hc, ← crossing_le_iff, hτ, WithTop.coe_le_coe]
-    · simp [hs, hc]
+    crossing_scaffold_ne_top_aux h fun p y hy _ ↦ ih p y hy (-p)
+  filter_upwards [eventually_ge_atTop (scaffold p x τ)] with C hC t
+  rw [wall_of_forall_not_equiv h, ← hτ, freeze_apply]
+  exact ((scaffold p x).monotone (min_le_right _ _)).trans hC
 
 /-- The walls of a short game eventually meet. -/
 theorem crossing_wall_ne_top (x : IGame) [Short x] : crossing (wall left x) (wall right x) ≠ ⊤ := by
@@ -303,8 +241,8 @@ theorem crossing_wall_ne_top (x : IGame) [Short x] : crossing (wall left x) (wal
   · obtain ⟨n, hn⟩ := h
     exact ne_top_of_le_ne_top (WithTop.coe_ne_top (a := ⊥))
       (crossing_le_iff.2 (by simp [wall_of_equiv hn]))
-  · obtain ⟨τ, hτ, -⟩ := exists_crossing_scaffold h
-    simp [crossing_wall_of_forall_not_equiv h, hτ]
+  · simpa [wall_of_forall_not_equiv h] using
+      crossing_scaffold_ne_top_aux h fun p y _ _ ↦ eventually_wall_le (-p) y
 
 /-- The temperature of `x` is the least `t ≥ -1` at which its walls meet. -/
 def temperature (x : IGame) [Short x] : 𝔻≥-1 :=
@@ -320,7 +258,7 @@ theorem temperature_le_iff : temperature x ≤ t ↔ 0 ≤ wall left x t + wall 
 /-- For a game not equal to an integer, the temperature is where the scaffolds meet. -/
 theorem temperature_of_forall_not_equiv (h : ∀ n : ℤ, ¬ x ≈ n) :
     temperature x = crossing (scaffold left x) (scaffold right x) := by
-  rw [temperature, WithTop.coe_untop, crossing_wall_of_forall_not_equiv h]
+  simp [temperature, wall_of_forall_not_equiv h]
 
 theorem wall_apply_of_le_temperature (h : ∀ n : ℤ, ¬ x ≈ n) (ht : t ≤ temperature x) :
     wall p x t = scaffold p x t := by
@@ -332,11 +270,10 @@ theorem wall_apply_of_temperature_le (ht : temperature x ≤ t) :
   by_cases! h : ∃ n : ℤ, x ≈ n
   · obtain ⟨n, hn⟩ := h
     cases p <;> simp [mean, wall_of_equiv hn]
-  obtain ⟨τ, hτ, hs⟩ := exists_crossing_scaffold h
-  have hT : temperature x = τ :=
-    WithTop.coe_injective (by rw [temperature_of_forall_not_equiv h, hτ])
-  rw [mean, wall_of_forall_not_equiv h, wall_of_forall_not_equiv h, hτ, freeze_apply,
-    freeze_apply, hT, min_self, min_eq_right (hT ▸ ht)]
+  have hs := add_eq_zero_of_crossing_eq (temperature_of_forall_not_equiv h).symm
+    (by simpa [wall_of_forall_not_equiv h] using (wall_bot_add_neg h).le)
+  rw [mean, wall_apply_of_le_temperature h le_rfl, wall_of_forall_not_equiv h,
+    ← temperature_of_forall_not_equiv h, freeze_apply, min_eq_right ht]
   cases p
   · exact eq_neg_of_add_eq_zero_left hs
   · rfl
@@ -377,54 +314,42 @@ private theorem temperature_mean_of {f g : Trajectory} {τ : 𝔻≥-1} {m : Dya
   rw [mean, wall_apply_of_le_temperature h le_rfl, hr, hT, hm]
   exact ⟨rfl, rfl⟩
 
-private theorem star_ne : ∀ n : ℤ, ¬ ⋆ ≈ n :=
-  forall_not_equiv_of_lt (a := -1) (b := 1) (by game_cmp) (by game_cmp) fun n h₁ h₂ ↦ by
-    obtain rfl : n = 0 := by omega
-    game_cmp
+private theorem scaffold_of_moves_eq_intCast {n : ℤ} (h : x.moves p = {(n : IGame)}) :
+    scaffold p x = reflect (const (p.cases n (-n))) := by
+  cases p <;> simp [scaffold_of_moves_eq_singleton h, wall_intCast]
 
-private theorem scaffold_star (p : Player) : scaffold p ⋆ = reflect (const 0) := by
-  cases p <;> simpa [scaffold_of_moves_eq_singleton (y := 0)] using
-    congrArg reflect (wall_intCast _ 0)
+private theorem star_ne : ∀ n : ℤ, ¬ ⋆ ≈ n :=
+  forall_not_equiv_of_lt (a := -1) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
+    interval_cases n; game_cmp
 
 example : temperature (⋆ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (⋆ : IGame.{u}) = 0 :=
-  temperature_mean_of star_ne (scaffold_star _) (scaffold_star _) (τ := ⟨0, by decide⟩) rfl rfl
+  temperature_mean_of star_ne (scaffold_of_moves_eq_intCast (n := 0) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
 
 example : temperature (↑ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (↑ : IGame.{u}) = 0 := by
-  have hs : wall left ⋆ = (reflect (const 0)).freeze ↑(⟨0, by decide⟩ : 𝔻≥-1) := by
-    rw [wall_of_forall_not_equiv star_ne, scaffold_star, scaffold_star]
-    rfl
-  refine temperature_mean_of (x := ↑) (τ := ⟨0, by decide⟩) ?_
-    (by simpa [scaffold_of_moves_eq_singleton (y := 0)] using congrArg reflect (wall_intCast _ 0))
-    (by rw [scaffold_of_moves_eq_singleton (y := ⋆) (by simp), neg_right, hs]) (by rfl) (by rfl)
-  exact forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by omega
+  refine temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp)) (by
+      rw [scaffold_of_moves_eq_singleton (y := ⋆) (by simp), neg_right,
+        wall_of_forall_not_equiv star_ne, scaffold_of_moves_eq_intCast (n := 0) (by simp),
+        scaffold_of_moves_eq_intCast (n := 0) (by simp)]) (by rfl) (by rfl)
 
-example : temperature (½ : IGame.{u}) = ⟨-.half, by decide⟩ ∧ mean (½ : IGame.{u}) = .half := by
-  refine temperature_mean_of (x := ½) (τ := ⟨-.half, by decide⟩) ?_
-    (by simpa [scaffold_of_moves_eq_singleton (y := 0)] using congrArg reflect (wall_intCast _ 0))
-    (by simpa [scaffold_of_moves_eq_singleton (y := 1)] using congrArg reflect (wall_intCast _ 1))
-    (by rfl) (by rfl)
-  exact forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by omega
+example : temperature (½ : IGame.{u}) = ⟨-.half, by decide⟩ ∧ mean (½ : IGame.{u}) = .half :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 1) (by simp)) rfl rfl
 
-example : temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 := by
-  refine temperature_mean_of (x := ±1) (τ := ⟨1, by decide⟩) ?_
-    (by simpa [scaffold_of_moves_eq_singleton (y := 1)] using congrArg reflect (wall_intCast _ 1))
-    (by simpa [scaffold_of_moves_eq_singleton (y := -1)] using
-      congrArg reflect (wall_intCast _ (-1))) (by rfl) (by rfl)
-  refine forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp) fun n _ _ ↦ ?_
-  obtain rfl | rfl | rfl : n = -1 ∨ n = 0 ∨ n = 1 := by omega
-  all_goals game_cmp
+example : temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 1) (by simp))
+    (scaffold_of_moves_eq_intCast (n := -1) (by simp)) rfl rfl
 
 private instance : Short !{{2} | {0}} := by
   rw [short_def]; simpa using Short.ofNat 2
 
 example : temperature (!{{2} | {0}} : IGame.{u}) = ⟨1, by decide⟩ ∧
-    mean (!{{2} | {0}} : IGame.{u}) = 1 := by
-  refine temperature_mean_of (x := !{{2} | {0}}) (τ := ⟨1, by decide⟩) ?_
-    (by simpa [scaffold_of_moves_eq_singleton (y := 2)] using congrArg reflect (wall_intCast _ 2))
-    (by simpa [scaffold_of_moves_eq_singleton (y := 0)] using congrArg reflect (wall_intCast _ 0))
-    (by rfl) (by rfl)
-  refine forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp) fun n _ _ ↦ ?_
-  obtain rfl | rfl | rfl : n = 0 ∨ n = 1 ∨ n = 2 := by omega
-  all_goals game_cmp
+    mean (!{{2} | {0}} : IGame.{u}) = 1 :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 2) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
 
 end IGame

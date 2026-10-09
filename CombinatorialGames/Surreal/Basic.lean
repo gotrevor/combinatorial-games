@@ -117,6 +117,24 @@ theorem Fits.exists_wsubposition_equiv {x y : IGame} [Numeric x] (hx : x.Fits y)
   obtain ⟨w, hwz, hw⟩ := ih p z hzx hz
   exact ⟨w, hwz.trans (.of_mem_moves hzx), hw⟩
 
+theorem exists_eq_intCast_of_wsubposition {n : ℤ} {x : IGame} (h : WSubposition x n) :
+    ∃ m : ℤ, x = m := by
+  generalize hy : (n : IGame) = y at h
+  induction y using moveRecOn generalizing n with | ind y ih
+  obtain rfl | h := wsubposition_iff_eq_or_subposition.1 h
+  · exact ⟨n, hy.symm⟩
+  obtain ⟨p, z, hz, hxz⟩ := subposition_iff_exists.1 h
+  subst hy
+  cases p
+  · exact ih _ z hz (eq_sub_one_of_mem_leftMoves_intCast hz).symm hxz
+  · exact ih _ z hz (eq_add_one_of_mem_rightMoves_intCast hz).symm hxz
+
+/-- If an integer fits within `x`, then `x` equals an integer. -/
+theorem Fits.exists_intCast_equiv {n : ℤ} {x : IGame} (h : Fits n x) : ∃ m : ℤ, x ≈ m := by
+  obtain ⟨y, hy, hyx⟩ := h.exists_wsubposition_equiv
+  obtain ⟨m, rfl⟩ := exists_eq_intCast_of_wsubposition hy
+  exact ⟨m, hyx.symm⟩
+
 /-- A specialization of the simplicity theorem to `0`. -/
 @[simp]
 theorem fits_zero_iff_equiv {x : IGame} : Fits 0 x ↔ x ≈ 0 :=
