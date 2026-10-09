@@ -105,8 +105,8 @@ theorem IsBreakSet.min (hf : IsBreakSet s f) (hg : IsBreakSet s g) :
   have ht : t ∈ Icc q u := ⟨hqt, htu⟩
   have hu : u ∈ Icc q u := ⟨hqt.trans htu, le_rfl⟩
   obtain hF | hF := hf.linear hu.1 hq' <;> obtain hG | hG := hg.linear hu.1 hq' <;>
-    grind [mem_Ici.1 t.2, hF t ht, hF u hu, hG t ht, hG u hu, Subtype.coe_le_coe.2 hqt,
-      Subtype.coe_le_coe.2 htu]
+    simp only [hF t ht, hF u hu, hG t ht, hG u hu] <;>
+    grind [mem_Ici.1 t.2, Subtype.coe_le_coe.2 hqt, Subtype.coe_le_coe.2 htu]
 
 /-- The least `t` with `0 ≤ f t + g t`, computed from a set `s` containing the breakpoints of `f`
 and `g`. The candidates are the points `q ∈ insert ⊥ s`, and the zeros `q - (f q + g q)` and
