@@ -24,8 +24,9 @@ such `t'`.
 
 Since we already have walls, temperature and mean, we instead define `x` cooled by `t` as its mean
 once `t` exceeds its temperature, and recurse otherwise. We then show that this agrees with Siegel's
-definition, and that the walls of `x` are the stops of `x` cooled by `t`. Since cooling by `t > -1`
-is monotone, it respects equality, and hence so do walls, temperature and mean.
+definition, and that the walls of `x` are the stops of `x` cooled by `t`. Following Bando, Ken and
+Morikawa, cooling by `t > -1` is additive and monotone, so it respects equality, and hence so do
+walls, temperature and mean.
 
 At its temperature `x` hasn't frozen yet: `⋆` cooled by `0` is `⋆`, and `±1` cooled by `1` is `⋆`.
 
@@ -33,9 +34,10 @@ Cooling by `-1` does not respect equality: `!{{⋆, 1} | {0}} ≈ !{{1} | {0}}`,
 these differ by a nonzero infinitesimal, since the dominated option `⋆` heats up to `±1`. The walls
 still agree at `-1`, where the right wall is the greatest integer below `x`.
 
-## Todo
+## References
 
-Prove that cooling by `t > -1` is additive, `cool_add`, and hence that the mean is additive.
+* A. N. Siegel, *Combinatorial Game Theory*, §II.5
+* K. Bando, E. Ken and K. Morikawa, *Foundations of Temperature Theory*, arXiv:2009.02876
 -/
 
 public noncomputable section
@@ -375,6 +377,8 @@ private theorem stops_cool (x : IGame) [Short x] (t : 𝔻≥-1) :
       wall_apply_of_temperature_le ht]
     simp
 
+/-- The right wall of `x` is the right stop of `x` cooled by `t` (Bando, Ken and Morikawa,
+Theorem 4). -/
 theorem rightStop_cool (x : IGame) [Short x] (t : 𝔻≥-1) : rightStop (cool x t) = wall right x t :=
   (stops_cool x t).1
 
@@ -392,8 +396,9 @@ theorem rightStop_tax_temperature (h : ∀ n : ℤ, ¬ x ≈ n) :
   rw [rightStop_tax_of_le_temperature h le_rfl]
   exact wall_apply_of_temperature_le le_rfl
 
-/-- The game `tax x t` is infinitely close to a number exactly from the temperature of `x` onwards.
-Together with `rightStop_tax_temperature`, this says that `cool` agrees with Siegel's definition. -/
+/-- The game `tax x t` is infinitely close to a number exactly from the temperature of `x` onwards
+(Bando, Ken and Morikawa, Theorem 4 and Proposition 9). Together with `rightStop_tax_temperature`,
+this says that `cool` agrees with Siegel's definition. -/
 theorem leftStop_tax_eq_rightStop_tax_iff (h : ∀ n : ℤ, ¬ x ≈ n) :
     leftStop (tax x t) = rightStop (tax x t) ↔ temperature x ≤ t := by
   have H : ∀ y ∈ xᴸ, ∀ [Short y], rightStop (cool y t) = wall right y t :=
@@ -420,7 +425,7 @@ theorem leftStop_tax_eq_rightStop_tax_iff (h : ∀ n : ℤ, ¬ x ≈ n) :
       rw [leftStop_add_toIGame, H' y hy]
       simpa [neg_add_eq_sub] using scaffold_apply_le hy t
 
-/-! ### Monotonicity -/
+/-! ### Frozen games -/
 
 private theorem sub_add_cancel_equiv (a b : IGame) : a - b + b ≈ a :=
   Game.mk_eq_mk.1 (by simp)
@@ -431,7 +436,7 @@ private theorem temperature_lt_of_not_hot (hb : ⊥ < t)
 
 /-- If the right wall of `w` is constant on `[s, t]`, then `w` cooled by `t` is at least its value.
 If `u ↦ u - wall left w u` is constant on `[s, t]`, then its value is less or fuzzy than `w` cooled
-by `t`, plus `t`. -/
+by `t`, plus `t` (compare Bando, Ken and Morikawa, Lemma 7). -/
 private theorem le_cool_and_lf_cool_add (w : IGame) [Short w] {s : 𝔻≥-1} (hs : s < t) :
     (wall right w s = wall right w t → (wall right w t : IGame) ≤ cool w t) ∧
     ((s : Dyadic) - wall left w s = t - wall left w t →
@@ -459,7 +464,7 @@ private theorem le_cool_and_lf_cool_add (w : IGame) [Short w] {s : 𝔻≥-1} (h
           have h₃ := (wall left z).reflect.monotone hs.le
           simp only [reflect_apply] at h₃
           rw [h₁]
-          exact ((ih right z hz).2 (by linarith)).imp id
+          exact (ih right z hz).2 (by linarith)
     · rw [cool_of_not_hot hw, wall_apply_of_temperature_le
         (temperature_lt_of_not_hot ((bot_le.trans_lt hs)) hw).le]
   · intro he
@@ -491,7 +496,8 @@ private theorem le_cool_and_lf_cool_add (w : IGame) [Short w] {s : 𝔻≥-1} (h
     rw [leftMoves_tax]
     exact ⟨⟨v, hv⟩, rfl⟩
 
-/-- Once `x` has frozen, its mean fits in `tax x t`: this is the right half. -/
+/-- Once `x` has frozen, its mean fits in `tax x t` (compare Bando, Ken and Morikawa,
+Proposition 9): this is the right half. -/
 private theorem mean_lf_cool_add (hb : ⊥ < t) (ht : temperature x < t) {z : IGame} [Short z]
     (hz : z ∈ xᴿ) : (mean x : IGame) ⧏ cool z t + (t : Dyadic) := by
   obtain ⟨s, hs, hm⟩ : ∃ s < t, mean x ≤ s - wall left z s := by
