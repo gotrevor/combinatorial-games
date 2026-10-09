@@ -65,14 +65,6 @@ private theorem leftStop_eq_of {a : Dyadic} (h₁ : ∀ b : Dyadic, b < a → (b
 private theorem le_leftStop_of_lf {a : Dyadic} (h : (a : IGame) ⧏ x) : a ≤ leftStop x :=
   not_lt.1 fun ha ↦ h (lt_of_leftStop_lt (Dyadic.toIGame_lt_toIGame.2 ha)).le
 
-private theorem rightStop_eq_of_eq {a b : IGame} [Short a] [Short b] (h : a = b) :
-    rightStop a = rightStop b := by
-  subst h; rfl
-
-private theorem leftStop_eq_of_eq {a b : IGame} [Short a] [Short b] (h : a = b) :
-    leftStop a = leftStop b := by
-  subst h; rfl
-
 private theorem rightStop_mono (h : x ≤ y) : rightStop x ≤ rightStop y :=
   not_lt.1 fun hs ↦ by
     obtain ⟨b, hb, hb'⟩ := exists_between hs
@@ -96,16 +88,8 @@ theorem rightStop_neg (x : IGame) [Short x] : rightStop (-x) = -leftStop x := by
   · rw [← IGame.neg_le_neg_iff, neg_neg, ← Dyadic.toIGame_neg]
     exact lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 (neg_lt.1 hb))
 
-theorem leftStop_neg (x : IGame) [Short x] : leftStop (-x) = -rightStop x := by
-  exact neg_eq_iff_eq_neg.1 (by simpa using (rightStop_neg (-x)).symm)
-
-private theorem rightStop_add_toIGame (x : IGame) [Short x] (a : Dyadic) :
-    rightStop (x + a) = rightStop x + a := by
-  refine rightStop_eq_of (fun b hb ↦ ?_) fun b hb ↦ ?_
-  · rw [← IGame.sub_le_iff_le_add, ← (Dyadic.toIGame_sub_equiv b a).le_congr_left]
-    exact (lt_of_lt_rightStop (Dyadic.toIGame_lt_toIGame.2 (sub_lt_iff_lt_add.2 hb))).le
-  · rw [← IGame.sub_le_iff_le_add, ← (Dyadic.toIGame_sub_equiv b a).le_congr_left]
-    exact lf_of_rightStop_lt (Dyadic.toIGame_lt_toIGame.2 (lt_sub_iff_add_lt.2 hb))
+theorem leftStop_neg (x : IGame) [Short x] : leftStop (-x) = -rightStop x :=
+  neg_eq_iff_eq_neg.1 (by simpa using (rightStop_neg (-x)).symm)
 
 private theorem leftStop_add_toIGame (x : IGame) [Short x] (a : Dyadic) :
     leftStop (x + a) = leftStop x + a := by
@@ -279,15 +263,11 @@ theorem tax_neg (x : IGame) [Short x] (t : 𝔻≥-1) : tax (-x) t = -tax x t :=
 
 /-! ### Walls are stops -/
 
-private theorem wall_add_wall_nonpos (ht : t ≤ temperature x) :
-    wall left x t + wall right x t ≤ 0 := by
-  have := add_le_add ((wall left x).monotone ht) ((wall right x).monotone ht)
-  rwa [wall_apply_of_temperature_le le_rfl, wall_apply_of_temperature_le le_rfl,
-    neg_add_cancel] at this
-
 private theorem scaffold_add_scaffold_nonpos (h : ∀ n : ℤ, ¬ x ≈ n) (ht : t ≤ temperature x) :
     scaffold left x t + scaffold right x t ≤ 0 := by
-  simpa [wall_apply_of_le_temperature h ht] using wall_add_wall_nonpos ht
+  have := add_le_add ((wall left x).monotone ht) ((wall right x).monotone ht)
+  rwa [wall_apply_of_temperature_le le_rfl, wall_apply_of_temperature_le le_rfl, neg_add_cancel,
+    wall_apply_of_le_temperature h ht, wall_apply_of_le_temperature h ht] at this
 
 private theorem rightStop_tax_aux (h : ∀ n : ℤ, ¬ x ≈ n)
     (hs : scaffold left x t + scaffold right x t ≤ 0)
@@ -317,15 +297,16 @@ private theorem leftStop_tax_aux (h : ∀ n : ℤ, ¬ x ≈ n)
     leftStop (tax x t) = -scaffold left x t := by
   have h' (n : ℤ) : ¬ -x ≈ n := fun hn ↦ h (-n) (by simpa using neg_equiv.1 hn)
   have e := rightStop_tax_aux (t := t) h' (by rwa [scaffold_neg, scaffold_neg, add_comm]) ?_ ?_
-  · rw [rightStop_eq_of_eq (tax_neg x t), rightStop_neg, scaffold_neg, neg_right] at e
+  · rw [rightStop_congr (tax_neg x t).antisymmRel, rightStop_neg, scaffold_neg, neg_right] at e
     rw [← e, neg_neg]
   all_goals
     intro y hy _
     simp only [moves_neg, neg_left, neg_right, Set.mem_neg] at hy
     obtain ⟨z, hz, rfl⟩ : ∃ z, _ ∧ -z = y := ⟨-y, hy, neg_neg y⟩
     have := Short.of_mem_moves hz
-  · rw [rightStop_eq_of_eq (cool_neg z t), rightStop_neg, H' z hz, wall_neg, neg_right, neg_neg]
-  · rw [leftStop_eq_of_eq (cool_neg z t), leftStop_neg, H z hz, wall_neg, neg_left]
+  · rw [rightStop_congr (cool_neg z t).antisymmRel, rightStop_neg, H' z hz, wall_neg, neg_right,
+      neg_neg]
+  · rw [leftStop_congr (cool_neg z t).antisymmRel, leftStop_neg, H z hz, wall_neg, neg_left]
 
 private theorem stops_cool (x : IGame) [Short x] (t : 𝔻≥-1) :
     rightStop (cool x t) = wall right x t ∧ leftStop (cool x t) = -wall left x t := by
@@ -337,15 +318,16 @@ private theorem stops_cool (x : IGame) [Short x] (t : 𝔻≥-1) :
       fun y hy _ ↦ (ih left y hy).1
     have H' : ∀ y ∈ xᴿ, ∀ [Short y], leftStop (cool y t) = -wall left y t :=
       fun y hy _ ↦ (ih right y hy).2
-    rw [rightStop_eq_of_eq (cool_of_le_temperature h hx.2),
-      leftStop_eq_of_eq (cool_of_le_temperature h hx.2), wall_apply_of_le_temperature h hx.2,
+    have e : cool x t ≈ tax x t := (cool_of_le_temperature h hx.2).antisymmRel
+    rw [rightStop_congr e, leftStop_congr e, wall_apply_of_le_temperature h hx.2,
       wall_apply_of_le_temperature h hx.2]
     exact ⟨rightStop_tax_aux h hs H H', leftStop_tax_aux h hs H H'⟩
   · have ht : temperature x ≤ t := by
       by_contra! ht
       exact hx ⟨(bot_le.trans_lt ht), ht.le⟩
-    rw [rightStop_eq_of_eq (cool_of_not_hot hx), leftStop_eq_of_eq (cool_of_not_hot hx),
-      wall_apply_of_temperature_le ht, wall_apply_of_temperature_le ht]
+    have e : cool x t ≈ mean x := (cool_of_not_hot hx).antisymmRel
+    rw [rightStop_congr e, leftStop_congr e, wall_apply_of_temperature_le ht,
+      wall_apply_of_temperature_le ht]
     simp
 
 theorem rightStop_cool (x : IGame) [Short x] (t : 𝔻≥-1) : rightStop (cool x t) = wall right x t :=
@@ -358,7 +340,7 @@ theorem leftStop_cool (x : IGame) [Short x] (t : 𝔻≥-1) : leftStop (cool x t
 
 theorem rightStop_tax_of_le_temperature (h : ∀ n : ℤ, ¬ x ≈ n) (ht : t ≤ temperature x) :
     rightStop (tax x t) = wall right x t := by
-  rw [← rightStop_eq_of_eq (cool_of_le_temperature h ht), rightStop_cool]
+  rw [← rightStop_congr (cool_of_le_temperature h ht).antisymmRel, rightStop_cool]
 
 theorem rightStop_tax_temperature (h : ∀ n : ℤ, ¬ x ≈ n) :
     rightStop (tax x (temperature x)) = mean x := by
@@ -475,11 +457,8 @@ private theorem mean_lf_cool_add (hb : ⊥ < t) (ht : temperature x < t) {z : IG
     · obtain ⟨n, hn⟩ := h
       obtain ⟨k, hk, hk'⟩ := wall_right_bot (-z)
       refine ⟨⊥, hb, ?_⟩
-      have hm : mean x = n := by
-        simpa [wall_of_equiv hn] using (wall_apply_of_temperature_le (x := x) (p := right)
-          (t := temperature x) le_rfl).symm
       rw [wall_neg, neg_right] at hk
-      rw [hm, hk]
+      rw [mean_of_equiv hn, hk]
       have : k ≤ -n - 1 := by
         by_contra! hk''
         exact lf_right hz (le_trans (by simpa using (hk' (-n)).1 (by omega)) hn.ge)
@@ -509,6 +488,7 @@ private def CoolMonoIH (x y : IGame) : Prop :=
   ∀ x' y' : IGame, [Short x'] → [Short y'] → birthday x' + birthday y' < birthday x + birthday y →
     ∀ t : 𝔻≥-1, ⊥ < t → x' ≤ y' → cool x' t ≤ cool y' t
 
+omit [Short x] [Short y] in
 private theorem CoolMonoIH.neg (IH : CoolMonoIH x y) : CoolMonoIH (-y) (-x) :=
   fun x' y' _ _ h ↦ IH x' y' (by rwa [birthday_neg, birthday_neg, add_comm (birthday y)] at h)
 
@@ -552,8 +532,7 @@ private theorem cool_le_cool_of_frozen (IH : CoolMonoIH x y) (hb : ⊥ < t)
   exact (lt_of_lt_rightStop ((Numeric.left_lt hc).trans_le
     (Dyadic.toIGame_le_toIGame.2 h₁))).not_ge
 
-private theorem lf_cool_of_hot (IH : CoolMonoIH x y) (hb : ⊥ < t)
-    (hx : ⊥ < temperature x ∧ t ≤ temperature x) (h : x ≤ y) :
+private theorem lf_cool_of_hot (IH : CoolMonoIH x y) (hb : ⊥ < t) (h : x ≤ y) :
     ∀ v ∈ (tax x t)ᴸ, v ⧏ cool y t := by
   rw [leftMoves_tax]
   rintro _ ⟨⟨x', hx'⟩, rfl⟩
@@ -594,8 +573,8 @@ private theorem cool_le_cool_of_hot (IH : CoolMonoIH x y) (hb : ⊥ < t)
     by_cases hy : ⊥ < temperature y ∧ t ≤ temperature y
   · have hx' := forall_not_equiv_of_bot_lt hx.1
     have hy' := forall_not_equiv_of_bot_lt hy.1
-    have H₁ := lf_cool_of_hot IH hb hx h
-    have H₂ := lf_cool_of_hot IH.neg hb (by rwa [temperature_neg]) hneg
+    have H₁ := lf_cool_of_hot IH hb h
+    have H₂ := lf_cool_of_hot IH.neg hb hneg
     rw [tax_neg, moves_neg, cool_neg, cool_of_le_temperature hx' hx.2] at H₂
     rw [cool_of_le_temperature hy' hy.2] at H₁
     rw [cool_of_le_temperature hx' hx.2, cool_of_le_temperature hy' hy.2]
@@ -711,11 +690,13 @@ private theorem star_ne : ∀ n : ℤ, ¬ ⋆ ≈ n :=
   forall_not_equiv_of_lt (a := -1) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
     interval_cases n; game_cmp
 
-private theorem temperature_mean_star : temperature (⋆ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (⋆ : IGame.{u}) = 0 :=
+private theorem temperature_mean_star :
+    temperature (⋆ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (⋆ : IGame.{u}) = 0 :=
   temperature_mean_of star_ne (scaffold_of_moves_eq_intCast (n := 0) (by simp))
     (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
 
-private theorem temperature_mean_up : temperature (↑ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (↑ : IGame.{u}) = 0 := by
+private theorem temperature_mean_up :
+    temperature (↑ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (↑ : IGame.{u}) = 0 := by
   refine temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
     fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp)) (by
       rw [scaffold_of_moves_eq_singleton (y := ⋆) (by simp), neg_right,
@@ -727,7 +708,8 @@ example : temperature (½ : IGame.{u}) = ⟨-.half, by decide⟩ ∧ mean (½ : 
     fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp))
     (scaffold_of_moves_eq_intCast (n := 1) (by simp)) rfl rfl
 
-private theorem temperature_mean_switch : temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 :=
+private theorem temperature_mean_switch :
+    temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 :=
   temperature_mean_of (forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp)
     fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 1) (by simp))
     (scaffold_of_moves_eq_intCast (n := -1) (by simp)) rfl rfl
@@ -735,16 +717,15 @@ private theorem temperature_mean_switch : temperature (±1 : IGame.{u}) = ⟨1, 
 private instance : Short !{{2} | {0}} := by
   rw [short_def]; simpa using Short.ofNat 2
 
-private theorem temperature_mean_two_zero : temperature (!{{2} | {0}} : IGame.{u}) = ⟨1, by decide⟩ ∧
-    mean (!{{2} | {0}} : IGame.{u}) = 1 :=
+private theorem temperature_mean_two_zero :
+    temperature (!{{2} | {0}} : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (!{{2} | {0}} : IGame.{u}) = 1 :=
   temperature_mean_of (forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp)
     fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 2) (by simp))
     (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
 
-
 private theorem mem_moves_tax {w : IGame} :
     w ∈ (tax x t).moves p ↔ ∃ y, ∃ h : y ∈ x.moves p,
-      @cool y (.of_mem_moves h) t + p.cases (-((t : Dyadic) : IGame)) ((t : Dyadic) : IGame) = w := by
+      @cool y (.of_mem_moves h) t + p.cases (-(t : Dyadic) : IGame) (t : Dyadic) = w := by
   cases p <;> simp [leftMoves_tax, rightMoves_tax, sub_eq_add_neg]
 
 private theorem tax_eq {a b : IGame} [Short a] [Short b] (hl : xᴸ = {a}) (hr : xᴿ = {b}) :
@@ -773,13 +754,13 @@ private theorem switch_one_ne : ∀ n : ℤ, ¬ (±1 : IGame) ≈ n :=
 example : cool (±1) ⟨.half, by decide⟩ ≈ ±½ := by
   rw [cool_of_le_temperature switch_one_ne (temperature_mean_switch.1.ge.trans' (by decide)),
     tax_eq (leftMoves_switch 1) (rightMoves_switch 1)]
-  simp [cool_neg, Dyadic.toIGame_half]
+  simp only [cool_neg, cool_one, Dyadic.toIGame_half]
   game_cmp
 
 example : cool (±1) ⟨1, by decide⟩ ≈ ⋆ := by
   rw [cool_of_le_temperature switch_one_ne temperature_mean_switch.1.ge,
     tax_eq (leftMoves_switch 1) (rightMoves_switch 1)]
-  simp [cool_neg]
+  simp only [cool_neg, cool_one, Dyadic.toIGame_one]
   game_cmp
 
 private theorem two_zero_ne : ∀ n : ℤ, ¬ (!{{2} | {0}} : IGame) ≈ n :=
@@ -789,7 +770,8 @@ private theorem two_zero_ne : ∀ n : ℤ, ¬ (!{{2} | {0}} : IGame) ≈ n :=
 example : cool !{{2} | {0}} ⟨1, by decide⟩ ≈ 1 + ⋆ := by
   rw [cool_of_le_temperature two_zero_ne temperature_mean_two_zero.1.ge,
     tax_eq (leftMoves_ofSets ..) (rightMoves_ofSets ..)]
-  simp [show cool 2 ⟨1, by decide⟩ = 2 by simpa using cool_natCast 2 ⟨1, by decide⟩]
+  rw [show cool 2 ⟨1, by decide⟩ = 2 by simpa using cool_natCast 2 ⟨1, by decide⟩]
+  simp only [Dyadic.toIGame_one, cool_zero, zero_add]
   game_cmp
 
 example (ht : (1 : Dyadic) < t) : cool !{{2} | {0}} t = 1 := by
@@ -805,8 +787,8 @@ private instance : Short !{{1} | {0}} := by
 /-- Cooling by `-1` does not respect equality. -/
 example : !{{⋆, 1} | {0}} ≈ !{{1} | {0}} ∧ ¬ cool !{{⋆, 1} | {0}} ⊥ ≈ cool !{{1} | {0}} ⊥ := by
   refine ⟨by game_cmp, ?_⟩
-  have hA : cool !{{⋆, 1} | {0}} ⊥ =
-      !{{!{{(0 : IGame) - -1} | {(0 : IGame) + -1}} - -1, (1 : IGame) - -1} | {(0 : IGame) + -1}} := by
+  have hA : cool !{{⋆, 1} | {0}} ⊥ = !{{!{{(0 : IGame) - -1} | {(0 : IGame) + -1}} - -1,
+      (1 : IGame) - -1} | {(0 : IGame) + -1}} := by
     rw [cool_of_le_temperature (forall_not_equiv_of_lt (a := -1) (b := 2) (by game_cmp)
       (by game_cmp) fun n _ _ ↦ by interval_cases n <;> game_cmp) bot_le]
     ext p w
@@ -827,7 +809,8 @@ example : !{{⋆, 1} | {0}} ≈ !{{1} | {0}} ∧ ¬ cool !{{⋆, 1} | {0}} ⊥ �
     · exact ⟨fun ⟨y, hy, e⟩ ↦ by subst hy; simp [← e], fun h ↦ ⟨0, rfl, by simp [h]⟩⟩
   have hB : cool !{{1} | {0}} ⊥ = !{{(1 : IGame) - -1} | {(0 : IGame) + -1}} := by
     rw [cool_of_le_temperature (forall_not_equiv_of_lt (a := -1) (b := 2) (by game_cmp)
-      (by game_cmp) fun n _ _ ↦ by interval_cases n <;> game_cmp) bot_le, tax_eq (leftMoves_ofSets ..) (rightMoves_ofSets ..)]
+      (by game_cmp) fun n _ _ ↦ by interval_cases n <;> game_cmp) bot_le,
+      tax_eq (leftMoves_ofSets ..) (rightMoves_ofSets ..)]
     simp [sub_eq_add_neg]
   rw [hA, hB]
   game_cmp
