@@ -11,7 +11,7 @@ public import CombinatorialGames.Surreal.Birthday.Dyadic
 import CombinatorialGames.Tactic.GameCmp
 import Mathlib.Data.Set.Finite.Range
 import Mathlib.Tactic.IntervalCases
-import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Linarith.Frontend
 
 /-!
 # Cooling

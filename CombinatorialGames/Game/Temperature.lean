@@ -10,9 +10,13 @@ public import CombinatorialGames.Game.Trajectory
 
 import CombinatorialGames.Surreal.Basic
 import CombinatorialGames.Tactic.GameCmp
+import Mathlib.Data.Rat.Cast.Order
 import Mathlib.Order.Filter.AtTopBot.Basic
 import Mathlib.Order.Filter.Finite
-import Mathlib.Tactic.IntervalCases
+import Mathlib.Tactic.NormNum.Abs
+import Mathlib.Tactic.NormNum.DivMod
+import Mathlib.Tactic.NormNum.OfScientific
+import Mathlib.Tactic.NormNum.Pow
 
 /-!
 # Temperature
