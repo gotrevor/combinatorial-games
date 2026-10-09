@@ -232,12 +232,13 @@ private theorem cool_of_not_hot (h : ¬ (⊥ < temperature x ∧ t ≤ temperatu
     cool x t = mean x := by
   rw [cool, ite_eq_right h]
 
+private theorem mean_of_equiv {n : ℤ} (h : x ≈ n) : mean x = n := by
+  have := wall_apply_of_temperature_le (x := x) (p := right) (t := temperature x) le_rfl
+  rw [wall_of_equiv h] at this
+  exact this.symm
+
 theorem cool_of_equiv {n : ℤ} (h : x ≈ n) (t : 𝔻≥-1) : cool x t = n := by
-  have hm : mean x = n := by
-    have := wall_apply_of_temperature_le (x := x) (p := right) (t := temperature x) le_rfl
-    rw [wall_of_equiv h] at this
-    exact this.symm
-  rw [cool_of_not_hot fun h' ↦ h'.1.ne' (temperature_eq_bot_iff.2 ⟨n, h⟩), hm,
+  rw [cool_of_not_hot fun h' ↦ h'.1.ne' (temperature_eq_bot_iff.2 ⟨n, h⟩), mean_of_equiv h,
     Dyadic.toIGame_intCast]
 
 @[simp] theorem cool_intCast (n : ℤ) (t : 𝔻≥-1) : cool n t = n := cool_of_equiv .rfl t
@@ -391,5 +392,284 @@ theorem leftStop_tax_eq_rightStop_tax_iff (h : ∀ n : ℤ, ¬ x ≈ n) :
       refine lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 (ha'.trans_le ?_))
       rw [leftStop_add_toIGame, H' y hy]
       simpa [neg_add_eq_sub] using scaffold_apply_le hy t
+
+/-! ### Monotonicity -/
+
+private theorem sub_add_cancel_equiv (a b : IGame) : a - b + b ≈ a :=
+  Game.mk_eq_mk.1 (by simp)
+
+private theorem add_sub_cancel_equiv (a b : IGame) : a + b - b ≈ a :=
+  Game.mk_eq_mk.1 (by simp)
+
+private theorem temperature_lt_of_not_hot (hb : ⊥ < t)
+    (h : ¬ (⊥ < temperature x ∧ t ≤ temperature x)) : temperature x < t :=
+  not_le.1 fun ht ↦ h ⟨hb.trans_le ht, ht⟩
+
+/-- If the right wall of `w` is constant on `[s, t]`, then `w` cooled by `t` is at least its value.
+If `u ↦ u - wall left w u` is constant on `[s, t]`, then its value is less or fuzzy than `w` cooled
+by `t`, plus `t`. -/
+private theorem le_cool_and_lf_cool_add (w : IGame) [Short w] {s : 𝔻≥-1} (hs : s < t) :
+    (wall right w s = wall right w t → (wall right w t : IGame) ≤ cool w t) ∧
+    ((s : Dyadic) - wall left w s = t - wall left w t →
+      (((t : Dyadic) - wall left w t : Dyadic) : IGame) ⧏ cool w t + (t : Dyadic)) := by
+  induction w using moveRecOn generalizing ‹w.Short› with | ind w ih
+  constructor
+  · intro he
+    by_cases hw : ⊥ < temperature w ∧ t ≤ temperature w
+    · have h := forall_not_equiv_of_bot_lt hw.1
+      rw [cool_of_le_temperature h hw.2]
+      refine le_iff_forall_lf.2 ⟨fun c hc ↦ ?_, ?_⟩
+      · have := Numeric.of_mem_moves hc
+        refine (lt_of_lt_rightStop ((Numeric.left_lt hc).trans_le ?_)).not_ge
+        exact Dyadic.toIGame_le_toIGame.2 (rightStop_tax_of_le_temperature h hw.2).ge
+      · rw [rightMoves_tax]
+        rintro _ ⟨⟨z, hz⟩, rfl⟩
+        have := Short.of_mem_moves hz
+        have h₁ := scaffold_apply_le hz t
+        rw [neg_right, ← wall_apply_of_le_temperature h hw.2] at h₁
+        obtain h₁ | h₁ := h₁.lt_or_eq
+        · refine lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 ?_)
+          rwa [leftStop_add_toIGame, leftStop_cool, neg_add_eq_sub]
+        · have h₂ := scaffold_apply_le hz s
+          rw [neg_right, ← wall_apply_of_le_temperature h (hs.le.trans hw.2), he] at h₂
+          have h₃ := (wall left z).reflect.monotone hs.le
+          simp only [reflect_apply] at h₃
+          rw [h₁]
+          exact ((ih right z hz).2 (by linarith)).imp id
+    · rw [cool_of_not_hot hw, wall_apply_of_temperature_le
+        (temperature_lt_of_not_hot ((bot_le.trans_lt hs)) hw).le]
+  · intro he
+    have hw : ⊥ < temperature w ∧ t ≤ temperature w := by
+      by_contra hw
+      have hτ := temperature_lt_of_not_hot (bot_le.trans_lt hs) hw
+      have hr : max (temperature w) s < t := max_lt hτ hs
+      have h₁ := (wall left w).reflect.monotone (le_max_right (temperature w) s)
+      have h₂ := (wall left w).reflect.monotone hr.le
+      have h₃ : wall left w (max (temperature w) s) = wall left w t := by
+        rw [wall_apply_of_temperature_le (le_max_left _ _),
+          wall_apply_of_temperature_le hτ.le]
+      simp only [reflect_apply] at h₁ h₂
+      have : ((max (temperature w) s : 𝔻≥-1) : Dyadic) = t := by linarith
+      exact hr.ne (Subtype.ext this)
+    have h := forall_not_equiv_of_bot_lt hw.1
+    rw [cool_of_le_temperature h hw.2]
+    obtain ⟨v, hv, _, e⟩ :=
+      exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h left) s
+    have h₁ := scaffold_apply_le hv t
+    have h₂ := (wall right v).monotone hs.le
+    rw [← wall_apply_of_le_temperature h (hs.le.trans hw.2)] at e
+    rw [← wall_apply_of_le_temperature h hw.2] at h₁
+    simp only [neg_left] at e h₁
+    have hv' : (((t : Dyadic) - wall left w t : Dyadic) : IGame) ≤ cool v t := by
+      have := (ih left v hv).1 (by linarith)
+      rwa [show wall right v t = t - wall left w t by linarith] at this
+    refine lf_of_le_left (hv'.trans (sub_add_cancel_equiv _ _).ge) (add_right_mem_moves_add ?_ _)
+    rw [leftMoves_tax]
+    exact ⟨⟨v, hv⟩, rfl⟩
+
+/-- Once `x` has frozen, its mean fits in `tax x t`: this is the right half. -/
+private theorem mean_lf_cool_add (hb : ⊥ < t) (ht : temperature x < t) {z : IGame} [Short z]
+    (hz : z ∈ xᴿ) : (mean x : IGame) ⧏ cool z t + (t : Dyadic) := by
+  obtain ⟨s, hs, hm⟩ : ∃ s < t, mean x ≤ s - wall left z s := by
+    by_cases! h : ∃ n : ℤ, x ≈ n
+    · obtain ⟨n, hn⟩ := h
+      obtain ⟨k, hk, hk'⟩ := wall_right_bot (-z)
+      refine ⟨⊥, hb, ?_⟩
+      have hm : mean x = n := by
+        simpa [wall_of_equiv hn] using (wall_apply_of_temperature_le (x := x) (p := right)
+          (t := temperature x) le_rfl).symm
+      rw [wall_neg, neg_right] at hk
+      rw [hm, hk]
+      have : k ≤ -n - 1 := by
+        by_contra! hk''
+        exact lf_right hz (le_trans (by simpa using (hk' (-n)).1 (by omega)) hn.ge)
+      change (n : Dyadic) ≤ -1 - k
+      exact_mod_cast (by omega : n ≤ -1 - k)
+    · refine ⟨temperature x, ht, ?_⟩
+      have := scaffold_apply_le hz (temperature x)
+      rwa [neg_right, ← wall_apply_of_le_temperature h le_rfl,
+        wall_apply_of_temperature_le le_rfl] at this
+  have h₁ := (wall left z).reflect.monotone hs.le
+  simp only [reflect_apply] at h₁
+  obtain hm' | hm' := (hm.trans h₁).lt_or_eq
+  · refine lf_of_lt_leftStop (Dyadic.toIGame_lt_toIGame.2 ?_)
+    rwa [leftStop_add_toIGame, leftStop_cool, neg_add_eq_sub]
+  · rw [hm']
+    exact (le_cool_and_lf_cool_add z hs).2 (le_antisymm h₁ (hm'.symm.trans_le hm))
+
+/-- Once `x` has frozen, its mean fits in `tax x t`: this is the left half. -/
+private theorem cool_sub_lf_mean (hb : ⊥ < t) (ht : temperature x < t) {y : IGame} [Short y]
+    (hy : y ∈ xᴸ) : cool y t - (t : Dyadic) ⧏ mean x := by
+  have := mean_lf_cool_add (x := -x) hb (by rwa [temperature_neg]) (z := -y) (by simpa)
+  rw [mean_neg, Dyadic.toIGame_neg, cool_neg] at this
+  exact fun h ↦ this (by simpa [neg_sub, sub_eq_neg_add] using IGame.neg_le_neg_iff.2 h)
+
+/-- The induction hypothesis for `cool_le_cool`. -/
+private def CoolMonoIH (x y : IGame) : Prop :=
+  ∀ x' y' : IGame, [Short x'] → [Short y'] → birthday x' + birthday y' < birthday x + birthday y →
+    ∀ t : 𝔻≥-1, ⊥ < t → x' ≤ y' → cool x' t ≤ cool y' t
+
+private theorem CoolMonoIH.neg (IH : CoolMonoIH x y) : CoolMonoIH (-y) (-x) :=
+  fun x' y' _ _ h ↦ IH x' y' (by rwa [birthday_neg, birthday_neg, add_comm (birthday y)] at h)
+
+private theorem cool_le_cool_of_frozen (IH : CoolMonoIH x y) (hb : ⊥ < t)
+    (hx : temperature x < t) (hy : ⊥ < temperature y ∧ t ≤ temperature y) (h : x ≤ y) :
+    cool x t ≤ cool y t := by
+  have hy' := forall_not_equiv_of_bot_lt hy.1
+  rw [cool_of_temperature_lt hx, cool_of_le_temperature hy' hy.2]
+  have H : ∀ u ∈ (tax y t)ᴿ, (mean x : IGame) ⧏ u := by
+    rw [rightMoves_tax]
+    rintro _ ⟨⟨w, hw⟩, rfl⟩
+    have := Short.of_mem_moves hw
+    dsimp only
+    obtain ⟨z, hz, hxz⟩ | ⟨z, hz, hzw⟩ := lf_iff_exists_le.1 (lf_right_of_le h hw)
+    · have := Short.of_mem_moves hz
+      have hle := IH x z (add_lt_add_right ((birthday_lt_of_mem_moves hz).trans
+        (birthday_lt_of_mem_moves hw)) _) t hb hxz
+      rw [cool_of_temperature_lt hx] at hle
+      by_cases hw' : ⊥ < temperature w ∧ t ≤ temperature w
+      · rw [cool_of_le_temperature (forall_not_equiv_of_bot_lt hw'.1) hw'.2]
+        refine lf_of_le_left (hle.trans (sub_add_cancel_equiv _ _).ge)
+          (add_right_mem_moves_add ?_ _)
+        rw [leftMoves_tax]
+        exact ⟨⟨z, hz⟩, rfl⟩
+      · rw [cool_of_not_hot hw']
+        refine fun h' ↦ cool_sub_lf_mean hb (temperature_lt_of_not_hot hb hw') hz ?_
+        rw [IGame.le_sub_iff_add_le]
+        exact h'.trans hle
+    · have := Short.of_mem_moves hz
+      have hle := IH z w (add_lt_add (birthday_lt_of_mem_moves hz)
+        (birthday_lt_of_mem_moves hw)) t hb hzw
+      exact fun h' ↦ mean_lf_cool_add hb hx hz ((add_le_add_left hle _).trans h')
+  refine le_iff_forall_lf.2 ⟨fun c hc ↦ ?_, H⟩
+  have := Numeric.of_mem_moves hc
+  obtain ⟨w, hw, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv hy' right) t
+  have h₁ : mean x ≤ rightStop (tax y t) := by
+    rw [rightStop_tax_of_le_temperature hy' hy.2, wall_apply_of_le_temperature hy' hy.2, e,
+      neg_right]
+    have := le_leftStop_of_lf (H _ (by rw [rightMoves_tax]; exact ⟨⟨w, hw⟩, rfl⟩))
+    rwa [leftStop_add_toIGame, leftStop_cool, neg_add_eq_sub] at this
+  exact (lt_of_lt_rightStop ((Numeric.left_lt hc).trans_le
+    (Dyadic.toIGame_le_toIGame.2 h₁))).not_ge
+
+private theorem lf_cool_of_hot (IH : CoolMonoIH x y) (hb : ⊥ < t)
+    (hx : ⊥ < temperature x ∧ t ≤ temperature x) (h : x ≤ y) :
+    ∀ v ∈ (tax x t)ᴸ, v ⧏ cool y t := by
+  rw [leftMoves_tax]
+  rintro _ ⟨⟨x', hx'⟩, rfl⟩
+  have := Short.of_mem_moves hx'
+  dsimp only
+  obtain ⟨z, hz, hxz⟩ | ⟨z, hz, hzy⟩ := lf_iff_exists_le.1 (left_lf_of_le h hx')
+  · have := Short.of_mem_moves hz
+    have hle := IH x' z (add_lt_add (birthday_lt_of_mem_moves hx')
+      (birthday_lt_of_mem_moves hz)) t hb hxz
+    have key : cool z t - (t : Dyadic) ⧏ cool y t := by
+      by_cases hy : ⊥ < temperature y ∧ t ≤ temperature y
+      · rw [cool_of_le_temperature (forall_not_equiv_of_bot_lt hy.1) hy.2]
+        refine left_lf ?_
+        rw [leftMoves_tax]
+        exact ⟨⟨z, hz⟩, rfl⟩
+      · rw [cool_of_not_hot hy]
+        exact cool_sub_lf_mean hb (temperature_lt_of_not_hot hb hy) hz
+    exact fun h' ↦ key (h'.trans (add_le_add_left hle _))
+  · have := Short.of_mem_moves hz
+    have hle := IH z y (add_lt_add_left ((birthday_lt_of_mem_moves hz).trans
+      (birthday_lt_of_mem_moves hx')) _) t hb hzy
+    by_cases hx'' : ⊥ < temperature x' ∧ t ≤ temperature x'
+    · rw [cool_of_le_temperature (forall_not_equiv_of_bot_lt hx''.1) hx''.2, sub_eq_add_neg]
+      refine lf_of_right_le ((add_sub_cancel_equiv _ _).le.trans hle)
+        (add_right_mem_moves_add ?_ _)
+      rw [rightMoves_tax]
+      exact ⟨⟨z, hz⟩, rfl⟩
+    · rw [cool_of_not_hot hx'']
+      refine fun h' ↦ mean_lf_cool_add hb (temperature_lt_of_not_hot hb hx'') hz ?_
+      rw [← IGame.le_sub_iff_add_le]
+      exact hle.trans h'
+
+private theorem cool_le_cool_of_hot (IH : CoolMonoIH x y) (hb : ⊥ < t)
+    (hhot : (⊥ < temperature x ∧ t ≤ temperature x) ∨ (⊥ < temperature y ∧ t ≤ temperature y))
+    (h : x ≤ y) : cool x t ≤ cool y t := by
+  have hneg : -y ≤ -x := IGame.neg_le_neg_iff.2 h
+  by_cases hx : ⊥ < temperature x ∧ t ≤ temperature x <;>
+    by_cases hy : ⊥ < temperature y ∧ t ≤ temperature y
+  · have hx' := forall_not_equiv_of_bot_lt hx.1
+    have hy' := forall_not_equiv_of_bot_lt hy.1
+    have H₁ := lf_cool_of_hot IH hb hx h
+    have H₂ := lf_cool_of_hot IH.neg hb (by rwa [temperature_neg]) hneg
+    rw [tax_neg, moves_neg, cool_neg, cool_of_le_temperature hx' hx.2] at H₂
+    rw [cool_of_le_temperature hy' hy.2] at H₁
+    rw [cool_of_le_temperature hx' hx.2, cool_of_le_temperature hy' hy.2]
+    refine le_iff_forall_lf.2 ⟨H₁, fun u hu ↦ ?_⟩
+    simpa using H₂ (-u) (by simpa using hu)
+  · have := cool_le_cool_of_frozen IH.neg hb
+      (by rw [temperature_neg]; exact temperature_lt_of_not_hot hb hy)
+      (by rwa [temperature_neg]) hneg
+    rwa [cool_neg, cool_neg, IGame.neg_le_neg_iff] at this
+  · exact cool_le_cool_of_frozen IH hb (temperature_lt_of_not_hot hb hx) hy h
+  · exact (hhot.elim hx hy).elim
+
+private theorem cool_le_cool_aux (x y : IGame) [Short x] [Short y] (t : 𝔻≥-1) (hb : ⊥ < t)
+    (h : x ≤ y) : cool x t ≤ cool y t := by
+  have IH : CoolMonoIH x y := fun x' y' _ _ _ t hb h ↦ cool_le_cool_aux x' y' t hb h
+  by_cases hhot : (⊥ < temperature x ∧ t ≤ temperature x) ∨
+      (⊥ < temperature y ∧ t ≤ temperature y)
+  · exact cool_le_cool_of_hot IH hb hhot h
+  rw [not_or] at hhot
+  have hx := temperature_lt_of_not_hot hb hhot.1
+  have hy := temperature_lt_of_not_hot hb hhot.2
+  rw [cool_of_temperature_lt hx, cool_of_temperature_lt hy, Dyadic.toIGame_le_toIGame]
+  have key {s : 𝔻≥-1} (hxs : temperature x ≤ s) (hys : temperature y ≤ s) (hs : ⊥ < s)
+      (hhot : (⊥ < temperature x ∧ s ≤ temperature x) ∨ (⊥ < temperature y ∧ s ≤ temperature y)) :
+      mean x ≤ mean y := by
+    have := rightStop_mono (cool_le_cool_of_hot IH hs hhot h)
+    rwa [rightStop_cool, rightStop_cool, wall_apply_of_temperature_le hxs,
+      wall_apply_of_temperature_le hys] at this
+  obtain hxy | hxy := le_total (temperature x) (temperature y)
+  · obtain hy' | hy' := (bot_le : ⊥ ≤ temperature y).eq_or_lt
+    · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 (hxy.trans hy'.ge))
+      obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 hy'.symm
+      rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
+      exact hn.ge.trans (h.trans hm.le)
+    · exact key hxy le_rfl hy' (.inr ⟨hy', le_rfl⟩)
+  · obtain hx' | hx' := (bot_le : ⊥ ≤ temperature x).eq_or_lt
+    · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 hx'.symm
+      obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 (hxy.trans hx'.ge))
+      rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
+      exact hn.ge.trans (h.trans hm.le)
+    · exact key le_rfl hxy hx' (.inl ⟨hx', le_rfl⟩)
+termination_by birthday x + birthday y
+
+theorem cool_le_cool (ht : ⊥ < t) (h : x ≤ y) : cool x t ≤ cool y t :=
+  cool_le_cool_aux x y t ht h
+
+theorem cool_congr (ht : ⊥ < t) (h : x ≈ y) : cool x t ≈ cool y t :=
+  ⟨cool_le_cool ht h.le, cool_le_cool ht h.ge⟩
+
+/-! ### Walls only depend on the value -/
+
+private theorem wall_right_congr (h : x ≈ y) : wall right x = wall right y := by
+  refine Trajectory.ext fun t ↦ ?_
+  obtain rfl | ht := eq_bot_or_bot_lt t
+  · obtain ⟨k, hk, hk'⟩ := wall_right_bot x
+    obtain ⟨l, hl, hl'⟩ := wall_right_bot y
+    rw [hk, hl, Int.cast_inj]
+    exact le_antisymm ((hl' k).2 (((hk' k).1 le_rfl).trans h.le))
+      ((hk' l).2 (((hl' l).1 le_rfl).trans h.ge))
+  · rw [← rightStop_cool, ← rightStop_cool, rightStop_congr (cool_congr ht h)]
+
+theorem wall_congr (h : x ≈ y) (p : Player) : wall p x = wall p y := by
+  cases p
+  · rw [← neg_right, ← wall_neg, ← wall_neg]
+    exact wall_right_congr (neg_congr h)
+  · exact wall_right_congr h
+
+theorem temperature_congr (h : x ≈ y) : temperature x = temperature y :=
+  eq_of_forall_ge_iff fun t ↦ by
+    rw [temperature_le_iff, temperature_le_iff, wall_congr h, wall_congr h]
+
+theorem mean_congr (h : x ≈ y) : mean x = mean y := by
+  have H (z : IGame) [Short z] : wall right z (temperature z) = mean z :=
+    wall_apply_of_temperature_le le_rfl
+  rw [← H, ← H, wall_congr h, temperature_congr h]
 
 end IGame
