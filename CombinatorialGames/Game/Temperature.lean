@@ -5,13 +5,13 @@ Authors: Trevor Morris
 -/
 module
 
-public import CombinatorialGames.Game.Special
 public import CombinatorialGames.Game.Trajectory
 public import CombinatorialGames.Surreal.Basic
 
 import CombinatorialGames.Tactic.GameCmp
 import Mathlib.Data.Fintype.Order
-import Mathlib.Tactic.Linarith
+import Mathlib.Data.Set.Finite.Lattice
+import Mathlib.Tactic.Linarith -- shake: keep
 
 /-!
 # Temperature
@@ -248,29 +248,27 @@ private theorem wall_bot_add_neg (h : ∀ n : ℤ, ¬ x ≈ n) : wall left x ⊥
 private theorem crossing_scaffold_ne_top_aux (h : ∀ n : ℤ, ¬ x ≈ n)
     (H : ∀ p, ∀ y ∈ x.moves p, ∀ [Short y], ∃ C, ∀ q t, wall q y t ≤ C) :
     crossing (scaffold left x) (scaffold right x) ≠ ⊤ := by
-  have (p : Player) : ∃ M, ∀ y ∈ x.moves p, ∀ [Short y], ∀ t, wall (-p) y t ≤ M := by
-    have (y : x.moves p) : ∃ C, ∀ t, (have := Short.of_mem_moves y.2; wall (-p) y t) ≤ C :=
-      have := Short.of_mem_moves y.2
-      (H _ _ y.2).imp fun _ h ↦ h _
-    choose C hC using this
-    obtain ⟨M, hM⟩ := Finite.exists_le C
-    exact ⟨M, fun y hy _ t ↦ (hC ⟨y, hy⟩ t).trans (hM _)⟩
-  choose M hM using this
-  let T := Set.projIci (-1) (max (M left) (M right))
-  have hT : max (M left) (M right) ≤ T := (le_max_right ..).trans_eq (Set.coe_projIci ..).symm
-  have hS (p : Player) : T - max (M left) (M right) ≤ scaffold p x T := by
-    obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h p) T
-    have : M p ≤ max (M left) (M right) := by cases p <;> simp
-    linarith [hM p y hy T]
-  exact ne_top_of_le_ne_top WithTop.coe_ne_top
-    (crossing_le_iff (t := T).2 (by linarith [hS left, hS right]))
+  have (y : ⋃ p, x.moves p) : ∃ C, ∀ p (hy : y.1 ∈ x.moves p) t,
+      (have := Short.of_mem_moves hy; wall (-p) y t) ≤ C := by
+    obtain ⟨p, hp⟩ := Set.mem_iUnion.1 y.2
+    have := Short.of_mem_moves hp
+    exact (H p y hp).imp fun _ h _ _ ↦ h _
+  choose C hC using this
+  obtain ⟨M, hM⟩ := Finite.exists_le C
+  have hS (p : Player) : Set.projIci (-1) M - M ≤ scaffold p x (Set.projIci (-1) M) := by
+    obtain ⟨y, hy, _, e⟩ := exists_scaffold_apply_eq (nonempty_moves_of_forall_not_equiv h p) _
+    linarith [hC ⟨y, Set.mem_iUnion_of_mem p hy⟩ p hy (Set.projIci (-1) M),
+      hM ⟨y, Set.mem_iUnion_of_mem p hy⟩]
+  have : M ≤ Set.projIci (-1) M := (le_max_right ..).trans_eq (Set.coe_projIci ..).symm
+  exact ne_top_of_le_ne_top WithTop.coe_ne_top (crossing_le_iff.2 (by linarith [hS left, hS right]))
 
 private theorem exists_wall_le (x : IGame) [Short x] : ∃ C, ∀ p t, wall p x t ≤ C := by
   induction x using moveRecOn generalizing ‹x.Short› with | ind x ih
   by_cases! h : ∃ n : ℤ, x ≈ n
   · obtain ⟨n, hn⟩ := h
     exact ⟨max (-n) n, fun p t ↦ by cases p <;> simp [wall_of_equiv hn]⟩
-  obtain ⟨τ, hτ⟩ := WithTop.ne_top_iff_exists.1 (crossing_scaffold_ne_top_aux h fun p y hy _ ↦ ih p y hy)
+  obtain ⟨τ, hτ⟩ :=
+    WithTop.ne_top_iff_exists.1 (crossing_scaffold_ne_top_aux h fun p y hy _ ↦ ih p y hy)
   refine ⟨max (scaffold left x τ) (scaffold right x τ), fun p t ↦ ?_⟩
   rw [wall_of_forall_not_equiv h, ← hτ, freeze_apply]
   cases p
@@ -284,10 +282,7 @@ private theorem exists_crossing_scaffold (h : ∀ n : ℤ, ¬ x ≈ n) : ∃ τ 
   obtain ⟨τ, hτ⟩ := WithTop.ne_top_iff_exists.1 <|
     crossing_scaffold_ne_top_aux h fun _ y _ _ ↦ exists_wall_le y
   refine ⟨τ, hτ.symm, add_eq_zero_of_crossing_eq hτ.symm ?_⟩
-  have := wall_bot_add_neg h
-  rw [wall_of_forall_not_equiv h, wall_of_forall_not_equiv h, freeze_apply_bot,
-    freeze_apply_bot] at this
-  exact this.le
+  simpa [wall_of_forall_not_equiv h] using (wall_bot_add_neg h).le
 
 private theorem crossing_wall_of_forall_not_equiv (h : ∀ n : ℤ, ¬ x ≈ n) :
     crossing (wall left x) (wall right x) = crossing (scaffold left x) (scaffold right x) := by
@@ -338,9 +333,10 @@ theorem wall_apply_of_temperature_le (ht : temperature x ≤ t) :
   · obtain ⟨n, hn⟩ := h
     cases p <;> simp [mean, wall_of_equiv hn]
   obtain ⟨τ, hτ, hs⟩ := exists_crossing_scaffold h
-  have hT : temperature x = τ := WithTop.coe_injective (by rw [temperature_of_forall_not_equiv h, hτ])
-  rw [mean, wall_of_forall_not_equiv h, wall_of_forall_not_equiv h, hτ, freeze_apply, freeze_apply,
-    hT, min_self, min_eq_right (hT ▸ ht)]
+  have hT : temperature x = τ :=
+    WithTop.coe_injective (by rw [temperature_of_forall_not_equiv h, hτ])
+  rw [mean, wall_of_forall_not_equiv h, wall_of_forall_not_equiv h, hτ, freeze_apply,
+    freeze_apply, hT, min_self, min_eq_right (hT ▸ ht)]
   cases p
   · exact eq_neg_of_add_eq_zero_left hs
   · rfl
