@@ -42,7 +42,7 @@ universe u
 
 namespace IGame
 
-variable {x y : IGame} [Short x] [Short y] {t : 𝔻≥-1}
+variable {x y : IGame} [Short x] [Short y] {p : Player} {t : 𝔻≥-1}
 
 /-! ### Stops -/
 
@@ -671,5 +671,165 @@ theorem mean_congr (h : x ≈ y) : mean x = mean y := by
   have H (z : IGame) [Short z] : wall right z (temperature z) = mean z :=
     wall_apply_of_temperature_le le_rfl
   rw [← H, ← H, wall_congr h, temperature_congr h]
+
+
+theorem cool_add (ht : ⊥ < t) (x y : IGame) [Short x] [Short y] :
+    cool (x + y) t ≈ cool x t + cool y t :=
+  sorry
+
+theorem mean_add (x y : IGame) [Short x] [Short y] : mean (x + y) = mean x + mean y := by
+  let τ := max (temperature (x + y)) (max (temperature x) (temperature y))
+  let t : 𝔻≥-1 := ⟨τ + 1, Set.mem_Ici.2 (by linarith [Set.mem_Ici.1 τ.2])⟩
+  have ht : τ < t := Subtype.mk_lt_mk.2 (lt_add_one (τ : Dyadic))
+  have h := cool_add (bot_le.trans_lt ht) x y
+  rw [cool_of_temperature_lt ((le_max_left _ _).trans_lt ht),
+    cool_of_temperature_lt (((le_max_left _ _).trans (le_max_right _ _)).trans_lt ht),
+    cool_of_temperature_lt (((le_max_right _ _).trans (le_max_right _ _)).trans_lt ht)] at h
+  exact Dyadic.toIGame_equiv_toIGame.1 (h.trans (Dyadic.toIGame_add_equiv _ _).symm)
+
+/-! ### Examples -/
+
+omit [Short x] in
+private theorem forall_not_equiv_of_lt {a b : ℤ} (ha : a < x) (hb : x < b)
+    (h : ∀ n : ℤ, a < n → n < b → ¬ x ≈ n) (n : ℤ) : ¬ x ≈ n := fun hn ↦
+  h n (intCast_lt.1 (ha.trans_le hn.le)) (intCast_lt.1 (hn.ge.trans_lt hb)) hn
+
+private theorem temperature_mean_of {f g : Trajectory} {τ : 𝔻≥-1} {m : Dyadic}
+    (h : ∀ n : ℤ, ¬ x ≈ n) (hl : scaffold left x = f) (hr : scaffold right x = g)
+    (hτ : crossing f g = τ) (hm : g τ = m) : temperature x = τ ∧ mean x = m := by
+  have hT : temperature x = τ :=
+    WithTop.coe_injective (by rw [temperature_of_forall_not_equiv h, hl, hr, hτ])
+  have H : wall right x (temperature x) = mean x := wall_apply_of_temperature_le le_rfl
+  rw [← H, wall_apply_of_le_temperature h le_rfl, hr, hT, hm]
+  exact ⟨rfl, rfl⟩
+
+private theorem scaffold_of_moves_eq_intCast {n : ℤ} (h : x.moves p = {(n : IGame)}) :
+    scaffold p x = reflect (const (p.cases n (-n))) := by
+  cases p <;> simp [scaffold_of_moves_eq_singleton h, wall_intCast]
+
+private theorem star_ne : ∀ n : ℤ, ¬ ⋆ ≈ n :=
+  forall_not_equiv_of_lt (a := -1) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
+    interval_cases n; game_cmp
+
+private theorem temperature_mean_star : temperature (⋆ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (⋆ : IGame.{u}) = 0 :=
+  temperature_mean_of star_ne (scaffold_of_moves_eq_intCast (n := 0) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
+
+private theorem temperature_mean_up : temperature (↑ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (↑ : IGame.{u}) = 0 := by
+  refine temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp)) (by
+      rw [scaffold_of_moves_eq_singleton (y := ⋆) (by simp), neg_right,
+        wall_of_forall_not_equiv star_ne, scaffold_of_moves_eq_intCast (n := 0) (by simp),
+        scaffold_of_moves_eq_intCast (n := 0) (by simp)]) (by rfl) (by rfl)
+
+example : temperature (½ : IGame.{u}) = ⟨-.half, by decide⟩ ∧ mean (½ : IGame.{u}) = .half :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 1) (by simp)) rfl rfl
+
+private theorem temperature_mean_switch : temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 1) (by simp))
+    (scaffold_of_moves_eq_intCast (n := -1) (by simp)) rfl rfl
+
+private instance : Short !{{2} | {0}} := by
+  rw [short_def]; simpa using Short.ofNat 2
+
+private theorem temperature_mean_two_zero : temperature (!{{2} | {0}} : IGame.{u}) = ⟨1, by decide⟩ ∧
+    mean (!{{2} | {0}} : IGame.{u}) = 1 :=
+  temperature_mean_of (forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp)
+    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 2) (by simp))
+    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
+
+
+private theorem mem_moves_tax {w : IGame} :
+    w ∈ (tax x t).moves p ↔ ∃ y, ∃ h : y ∈ x.moves p,
+      @cool y (.of_mem_moves h) t + p.cases (-((t : Dyadic) : IGame)) ((t : Dyadic) : IGame) = w := by
+  cases p <;> simp [leftMoves_tax, rightMoves_tax, sub_eq_add_neg]
+
+private theorem tax_eq {a b : IGame} [Short a] [Short b] (hl : xᴸ = {a}) (hr : xᴿ = {b}) :
+    tax x t = !{{cool a t - (t : Dyadic)} | {cool b t + (t : Dyadic)}} := by
+  ext p w
+  cases p <;> simp only [mem_moves_tax, hl, hr, moves_ofSets, Player.cases, Set.mem_singleton_iff,
+    sub_eq_add_neg] <;> exact ⟨fun ⟨_, rfl, e⟩ ↦ e.symm, fun e ↦ ⟨_, rfl, e.symm⟩⟩
+
+example : cool (⋆ : IGame) ⟨0, by decide⟩ = ⋆ := by
+  rw [cool_of_le_temperature star_ne temperature_mean_star.1.ge, tax_eq (moves_star left)
+    (moves_star right)]
+  ext p; cases p <;> simp
+
+example (ht : (0 : Dyadic) < t) : cool (⋆ : IGame) t = 0 := by
+  rw [cool_of_temperature_lt (temperature_mean_star.1.trans_lt ht), temperature_mean_star.2,
+    Dyadic.toIGame_zero]
+
+example (ht : (0 : Dyadic) < t) : cool (↑ : IGame) t = 0 := by
+  rw [cool_of_temperature_lt (temperature_mean_up.1.trans_lt ht), temperature_mean_up.2,
+    Dyadic.toIGame_zero]
+
+private theorem switch_one_ne : ∀ n : ℤ, ¬ (±1 : IGame) ≈ n :=
+  forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
+    interval_cases n <;> game_cmp
+
+example : cool (±1) ⟨.half, by decide⟩ ≈ ±½ := by
+  rw [cool_of_le_temperature switch_one_ne (temperature_mean_switch.1.ge.trans' (by decide)),
+    tax_eq (leftMoves_switch 1) (rightMoves_switch 1)]
+  simp [cool_neg, Dyadic.toIGame_half]
+  game_cmp
+
+example : cool (±1) ⟨1, by decide⟩ ≈ ⋆ := by
+  rw [cool_of_le_temperature switch_one_ne temperature_mean_switch.1.ge,
+    tax_eq (leftMoves_switch 1) (rightMoves_switch 1)]
+  simp [cool_neg]
+  game_cmp
+
+private theorem two_zero_ne : ∀ n : ℤ, ¬ (!{{2} | {0}} : IGame) ≈ n :=
+  forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
+    interval_cases n <;> game_cmp
+
+example : cool !{{2} | {0}} ⟨1, by decide⟩ ≈ 1 + ⋆ := by
+  rw [cool_of_le_temperature two_zero_ne temperature_mean_two_zero.1.ge,
+    tax_eq (leftMoves_ofSets ..) (rightMoves_ofSets ..)]
+  simp [show cool 2 ⟨1, by decide⟩ = 2 by simpa using cool_natCast 2 ⟨1, by decide⟩]
+  game_cmp
+
+example (ht : (1 : Dyadic) < t) : cool !{{2} | {0}} t = 1 := by
+  rw [cool_of_temperature_lt (temperature_mean_two_zero.1.trans_lt ht),
+    temperature_mean_two_zero.2, Dyadic.toIGame_one]
+
+private instance : Short !{{⋆, 1} | {0}} := by
+  rw [short_def]; simp
+
+private instance : Short !{{1} | {0}} := by
+  rw [short_def]; simp
+
+/-- Cooling by `-1` does not respect equality. -/
+example : !{{⋆, 1} | {0}} ≈ !{{1} | {0}} ∧ ¬ cool !{{⋆, 1} | {0}} ⊥ ≈ cool !{{1} | {0}} ⊥ := by
+  refine ⟨by game_cmp, ?_⟩
+  have hA : cool !{{⋆, 1} | {0}} ⊥ =
+      !{{!{{(0 : IGame) - -1} | {(0 : IGame) + -1}} - -1, (1 : IGame) - -1} | {(0 : IGame) + -1}} := by
+    rw [cool_of_le_temperature (forall_not_equiv_of_lt (a := -1) (b := 2) (by game_cmp)
+      (by game_cmp) fun n _ _ ↦ by interval_cases n <;> game_cmp) bot_le]
+    ext p w
+    cases p <;> simp only [mem_moves_tax, moves_ofSets, Player.cases, Set.mem_insert_iff,
+      Set.mem_singleton_iff]
+    · refine ⟨fun ⟨y, hy, e⟩ ↦ ?_, fun h ↦ ?_⟩
+      · obtain rfl | rfl := hy
+        · left
+          rw [← e, cool_of_le_temperature star_ne bot_le, tax_eq (moves_star left)
+            (moves_star right)]
+          simp [sub_eq_add_neg]
+        · simp [← e]
+      · obtain rfl | rfl := h
+        · refine ⟨⋆, .inl rfl, ?_⟩
+          rw [cool_of_le_temperature star_ne bot_le, tax_eq (moves_star left) (moves_star right)]
+          simp [sub_eq_add_neg]
+        · exact ⟨1, .inr rfl, by simp [sub_eq_add_neg]⟩
+    · exact ⟨fun ⟨y, hy, e⟩ ↦ by subst hy; simp [← e], fun h ↦ ⟨0, rfl, by simp [h]⟩⟩
+  have hB : cool !{{1} | {0}} ⊥ = !{{(1 : IGame) - -1} | {(0 : IGame) + -1}} := by
+    rw [cool_of_le_temperature (forall_not_equiv_of_lt (a := -1) (b := 2) (by game_cmp)
+      (by game_cmp) fun n _ _ ↦ by interval_cases n <;> game_cmp) bot_le, tax_eq (leftMoves_ofSets ..) (rightMoves_ofSets ..)]
+    simp [sub_eq_add_neg]
+  rw [hA, hB]
+  game_cmp
 
 end IGame
