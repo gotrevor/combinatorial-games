@@ -245,6 +245,16 @@ theorem crossing_le_iff : crossing f g ≤ t ↔ 0 ≤ f t + g t := by
   unfold crossing
   induction breaks₂ f g using Trunc.ind with | _ s => exact crossingAux_le_iff s.2.1 s.2.2
 
+/-- The trajectory `t ↦ f (min t τ)`, which follows `f` until time `τ`, and is then constant. -/
+def freeze (f : Trajectory) : WithTop 𝔻≥-1 → Trajectory
+  | ⊤ => f
+  | (τ : 𝔻≥-1) => f ⊓ const (f τ)
+
+@[simp] theorem freeze_top (f : Trajectory) : f.freeze ⊤ = f := rfl
+
+theorem freeze_apply (f : Trajectory) (τ t : 𝔻≥-1) : f.freeze τ t = f (min t τ) :=
+  (f.monotone.map_min ..).symm
+
 -- The scaffolds of `⋆` meet at `0`, and those of `½` at `-½`.
 example : crossing (reflect (const 0)) (reflect (const 0)) = ↑(⟨0, by decide⟩ : 𝔻≥-1) := rfl
 example : crossing (reflect (const (-1))) (reflect (const 0)) = ↑(⟨-.half, by decide⟩ : 𝔻≥-1) :=

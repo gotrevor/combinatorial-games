@@ -23,6 +23,7 @@ public import CombinatorialGames.Game.Special
 public import CombinatorialGames.Game.Specific.Domineering
 public import CombinatorialGames.Game.Specific.Nim
 public import CombinatorialGames.Game.Specific.Poset
+public import CombinatorialGames.Game.Temperature
 public import CombinatorialGames.Game.Trajectory
 public import CombinatorialGames.Mathlib.Dyadic
 public import CombinatorialGames.Mathlib.EtaSet
