@@ -42,14 +42,8 @@ Every short game without left or right options equals an integer, but so do form
 `!{{-2} | {2}}`, whose scaffolds meet at `-1` with values `1` and `-1`, rather than `0`. We
 therefore case on whether `x` equals an integer, which makes these definitions noncomputable.
 
-## Todo
-
-Define cooling, show that the walls of `x` are the stops of `x` cooled by `t`, and deduce that
-walls, temperature and mean only depend on the value of `x`:
-
-* `wall_congr (h : x ≈ y) : wall p x = wall p y`
-* `temperature_congr (h : x ≈ y) : temperature x = temperature y`
-* `mean_congr (h : x ≈ y) : mean x = mean y`
+In `CombinatorialGames.Game.Cooling`, we show that the walls of `x` are the stops of `x` cooled by
+`t`, and deduce that walls, temperature and mean only depend on the value of `x`.
 -/
 
 public noncomputable section
@@ -178,7 +172,7 @@ theorem scaffold_neg (p : Player) (x : IGame) [Short x] : scaffold p (-x) = scaf
 /-! ### Temperature and mean -/
 
 /-- At `t = -1`, the right wall of `x` is the greatest integer `n ≤ x`. -/
-private theorem wall_right_bot (x : IGame) [Short x] :
+theorem wall_right_bot (x : IGame) [Short x] :
     ∃ k : ℤ, wall right x ⊥ = k ∧ ∀ n : ℤ, n ≤ k ↔ n ≤ x := by
   by_cases! h : ∃ n : ℤ, x ≈ n
   · obtain ⟨m, hm⟩ := h
@@ -298,58 +292,5 @@ theorem temperature_intCast (n : ℤ) : temperature n = ⊥ :=
 
 theorem mean_intCast (n : ℤ) : mean n = n := by
   simp [mean, wall_intCast]
-
-/-! ### Examples -/
-
-omit [Short x] in
-private theorem forall_not_equiv_of_lt {a b : ℤ} (ha : a < x) (hb : x < b)
-    (h : ∀ n : ℤ, a < n → n < b → ¬ x ≈ n) (n : ℤ) : ¬ x ≈ n := fun hn ↦
-  h n (intCast_lt.1 (ha.trans_le hn.le)) (intCast_lt.1 (hn.ge.trans_lt hb)) hn
-
-private theorem temperature_mean_of {f g : Trajectory} {τ : 𝔻≥-1} {m : Dyadic}
-    (h : ∀ n : ℤ, ¬ x ≈ n) (hl : scaffold left x = f) (hr : scaffold right x = g)
-    (hτ : crossing f g = τ) (hm : g τ = m) : temperature x = τ ∧ mean x = m := by
-  have hT : temperature x = τ :=
-    WithTop.coe_injective (by rw [temperature_of_forall_not_equiv h, hl, hr, hτ])
-  rw [mean, wall_apply_of_le_temperature h le_rfl, hr, hT, hm]
-  exact ⟨rfl, rfl⟩
-
-private theorem scaffold_of_moves_eq_intCast {n : ℤ} (h : x.moves p = {(n : IGame)}) :
-    scaffold p x = reflect (const (p.cases n (-n))) := by
-  cases p <;> simp [scaffold_of_moves_eq_singleton h, wall_intCast]
-
-private theorem star_ne : ∀ n : ℤ, ¬ ⋆ ≈ n :=
-  forall_not_equiv_of_lt (a := -1) (b := 1) (by game_cmp) (by game_cmp) fun n _ _ ↦ by
-    interval_cases n; game_cmp
-
-example : temperature (⋆ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (⋆ : IGame.{u}) = 0 :=
-  temperature_mean_of star_ne (scaffold_of_moves_eq_intCast (n := 0) (by simp))
-    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
-
-example : temperature (↑ : IGame.{u}) = ⟨0, by decide⟩ ∧ mean (↑ : IGame.{u}) = 0 := by
-  refine temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
-    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp)) (by
-      rw [scaffold_of_moves_eq_singleton (y := ⋆) (by simp), neg_right,
-        wall_of_forall_not_equiv star_ne, scaffold_of_moves_eq_intCast (n := 0) (by simp),
-        scaffold_of_moves_eq_intCast (n := 0) (by simp)]) (by rfl) (by rfl)
-
-example : temperature (½ : IGame.{u}) = ⟨-.half, by decide⟩ ∧ mean (½ : IGame.{u}) = .half :=
-  temperature_mean_of (forall_not_equiv_of_lt (a := 0) (b := 1) (by game_cmp) (by game_cmp)
-    fun n _ _ ↦ by omega) (scaffold_of_moves_eq_intCast (n := 0) (by simp))
-    (scaffold_of_moves_eq_intCast (n := 1) (by simp)) rfl rfl
-
-example : temperature (±1 : IGame.{u}) = ⟨1, by decide⟩ ∧ mean (±1 : IGame.{u}) = 0 :=
-  temperature_mean_of (forall_not_equiv_of_lt (a := -2) (b := 2) (by game_cmp) (by game_cmp)
-    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 1) (by simp))
-    (scaffold_of_moves_eq_intCast (n := -1) (by simp)) rfl rfl
-
-private instance : Short !{{2} | {0}} := by
-  rw [short_def]; simpa using Short.ofNat 2
-
-example : temperature (!{{2} | {0}} : IGame.{u}) = ⟨1, by decide⟩ ∧
-    mean (!{{2} | {0}} : IGame.{u}) = 1 :=
-  temperature_mean_of (forall_not_equiv_of_lt (a := -1) (b := 3) (by game_cmp) (by game_cmp)
-    fun n _ _ ↦ by interval_cases n <;> game_cmp) (scaffold_of_moves_eq_intCast (n := 2) (by simp))
-    (scaffold_of_moves_eq_intCast (n := 0) (by simp)) rfl rfl
 
 end IGame
