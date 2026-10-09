@@ -198,6 +198,9 @@ def reflect (f : Trajectory) : Trajectory where
 theorem reflect_reflect (f : Trajectory) : reflect (reflect f) = f := by
   ext; simp
 
+theorem apply_le_apply_add {t u : 𝔻≥-1} (f : Trajectory) (h : t ≤ u) : f u ≤ f t + (u - t) := by
+  linarith [f.reflect.monotone h, reflect_apply f t, reflect_apply f u]
+
 /-! ### Lattice structure -/
 
 instance : Min Trajectory where
@@ -220,6 +223,10 @@ theorem le_def : f ≤ g ↔ ∀ t, f t ≤ g t := .rfl
 instance : DistribLattice Trajectory :=
   DFunLike.coe_injective.distribLattice _ .rfl .rfl
     (fun f g ↦ funext (sup_apply f g)) (fun f g ↦ funext (inf_apply f g))
+
+theorem inf'_apply {ι : Type*} {s : Finset ι} (H : s.Nonempty) (f : ι → Trajectory) (t : 𝔻≥-1) :
+    s.inf' H f t = s.inf' H (f · t) :=
+  Finset.apply_inf'_eq_inf'_comp H (fun f : Trajectory ↦ f t) fun _ _ ↦ rfl
 
 @[simp]
 theorem reflect_le_reflect : reflect f ≤ reflect g ↔ g ≤ f :=
@@ -245,6 +252,31 @@ theorem crossing_le_iff : crossing f g ≤ t ↔ 0 ≤ f t + g t := by
   unfold crossing
   induction breaks₂ f g using Trunc.ind with | _ s => exact crossingAux_le_iff s.2.1 s.2.2
 
+theorem crossing_comm (f g : Trajectory) : crossing f g = crossing g f :=
+  eq_of_forall_ge_iff fun t ↦ by
+    induction t using WithTop.recTopCoe <;> simp [crossing_le_iff, add_comm]
+
+/-- If `f + g` starts out nonpositive, it vanishes where it first becomes nonnegative. -/
+theorem add_eq_zero_of_crossing_eq (h : crossing f g = t) (h₀ : f ⊥ + g ⊥ ≤ 0) :
+    f t + g t = 0 := by
+  have ht := crossing_le_iff.1 h.le
+  refine le_antisymm (not_lt.1 fun hpos ↦ ?_) ht
+  have hm : Dyadic.half * (f t + g t) + .half * (f t + g t) = f t + g t := by
+    rw [← add_mul, show Dyadic.half + .half = 1 by decide, one_mul]
+  set s := projIci (-1) (t - .half * (f t + g t))
+  have hs : (s : Dyadic) = max (-1) (t - .half * (f t + g t)) := coe_projIci ..
+  have hst : s ≤ t := by
+    rw [← Subtype.coe_le_coe, hs]
+    exact max_le t.2 (by linarith)
+  have hts : t ≤ s := WithTop.coe_le_coe.1 <| h ▸ crossing_le_iff.2 (by
+    linarith [f.apply_le_apply_add hst, g.apply_le_apply_add hst,
+      le_max_right (-1 : Dyadic) (t - .half * (f t + g t))])
+  have e := congrArg Subtype.val (hts.antisymm hst)
+  obtain h₁ | h₁ := max_choice (-1 : Dyadic) (t - .half * (f t + g t)) <;> rw [hs, h₁] at e
+  · obtain rfl : t = ⊥ := Subtype.ext e
+    linarith
+  · linarith
+
 /-- The trajectory `t ↦ f (min t τ)`, which follows `f` until time `τ`, and is then constant. -/
 def freeze (f : Trajectory) : WithTop 𝔻≥-1 → Trajectory
   | ⊤ => f
@@ -254,6 +286,10 @@ def freeze (f : Trajectory) : WithTop 𝔻≥-1 → Trajectory
 
 theorem freeze_apply (f : Trajectory) (τ t : 𝔻≥-1) : f.freeze τ t = f (min t τ) :=
   (f.monotone.map_min ..).symm
+
+@[simp]
+theorem freeze_apply_bot (f : Trajectory) (τ : WithTop 𝔻≥-1) : f.freeze τ ⊥ = f ⊥ := by
+  induction τ using WithTop.recTopCoe <;> simp [freeze_apply]
 
 -- The scaffolds of `⋆` meet at `0`, and those of `½` at `-½`.
 example : crossing (reflect (const 0)) (reflect (const 0)) = ↑(⟨0, by decide⟩ : 𝔻≥-1) := rfl
