@@ -32,6 +32,10 @@ At its temperature `x` hasn't frozen yet: `⋆` cooled by `0` is `⋆`, and `±1
 Cooling by `-1` does not respect equality: `!{{⋆, 1} | {0}} ≈ !{{1} | {0}}`, but cooled by `-1`
 these differ by a nonzero infinitesimal, since the dominated option `⋆` heats up to `±1`. The walls
 still agree at `-1`, where the right wall is the greatest integer below `x`.
+
+## Todo
+
+Prove that cooling by `t > -1` is additive, `cool_add`, and hence that the mean is additive.
 -/
 
 public noncomputable section
@@ -155,8 +159,7 @@ private theorem leftStop_eq_rightStop_of_fits {a : Dyadic} (h : Fits a x) :
 
 mutual
 
-/-- The game `!{(cool · t - t) '' xᴸ | (cool · t + t) '' xᴿ}`, i.e. `x` cooled by `t` unless `x`
-has frozen. -/
+/-- The game `!{(cool · t - t) '' xᴸ | (cool · t + t) '' xᴿ}`, `x` cooled by `t` until frozen. -/
 def tax (x : IGame) [Short x] (t : 𝔻≥-1) : IGame :=
   !{.range fun y : xᴸ ↦ have := Short.of_mem_moves y.2; cool y t - (t : Dyadic) |
     .range fun y : xᴿ ↦ have := Short.of_mem_moves y.2; cool y t + (t : Dyadic)}
@@ -201,9 +204,7 @@ private theorem forall_not_equiv_of_bot_lt (h : ⊥ < temperature x) : ∀ n : �
   fun n hn ↦ h.ne' (temperature_eq_bot_iff.2 ⟨n, hn⟩)
 
 private theorem bot_lt_of_forall_not_equiv (h : ∀ n : ℤ, ¬ x ≈ n) : ⊥ < temperature x :=
-  bot_lt_iff_ne_bot.2 fun ht ↦ by
-    obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 ht
-    exact h n hn
+  bot_lt_iff_ne_bot.2 fun ht ↦ let ⟨n, hn⟩ := temperature_eq_bot_iff.1 ht; h n hn
 
 theorem cool_of_le_temperature (h : ∀ n : ℤ, ¬ x ≈ n) (ht : t ≤ temperature x) :
     cool x t = tax x t := by
@@ -597,25 +598,16 @@ private theorem cool_le_cool_aux (x y : IGame) [Short x] [Short y] (t : 𝔻≥-
   have hx := temperature_lt_of_not_hot hb hhot.1
   have hy := temperature_lt_of_not_hot hb hhot.2
   rw [cool_of_temperature_lt hx, cool_of_temperature_lt hy, Dyadic.toIGame_le_toIGame]
-  have key {s : 𝔻≥-1} (hxs : temperature x ≤ s) (hys : temperature y ≤ s) (hs : ⊥ < s)
-      (hhot : (⊥ < temperature x ∧ s ≤ temperature x) ∨ (⊥ < temperature y ∧ s ≤ temperature y)) :
-      mean x ≤ mean y := by
-    have := rightStop_mono (cool_le_cool_of_hot IH hs hhot h)
-    rwa [rightStop_cool, rightStop_cool, wall_apply_of_temperature_le hxs,
-      wall_apply_of_temperature_le hys] at this
-  obtain hxy | hxy := le_total (temperature x) (temperature y)
-  · obtain hy' | hy' := (bot_le : ⊥ ≤ temperature y).eq_or_lt
-    · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 (hxy.trans hy'.ge))
-      obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 hy'.symm
-      rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
-      exact hn.ge.trans (h.trans hm.le)
-    · exact key hxy le_rfl hy' (.inr ⟨hy', le_rfl⟩)
-  · obtain hx' | hx' := (bot_le : ⊥ ≤ temperature x).eq_or_lt
-    · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 hx'.symm
-      obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 (hxy.trans hx'.ge))
-      rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
-      exact hn.ge.trans (h.trans hm.le)
-    · exact key le_rfl hxy hx' (.inl ⟨hx', le_rfl⟩)
+  obtain hs | hs := (bot_le : ⊥ ≤ max (temperature x) (temperature y)).eq_or_lt
+  · obtain ⟨n, hn⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 ((le_max_left _ _).trans hs.ge))
+    obtain ⟨m, hm⟩ := temperature_eq_bot_iff.1 (le_bot_iff.1 ((le_max_right _ _).trans hs.ge))
+    rw [mean_of_equiv hn, mean_of_equiv hm, Int.cast_le, ← intCast_le]
+    exact hn.ge.trans (h.trans hm.le)
+  · have := rightStop_mono <| cool_le_cool_of_hot IH hs (by
+      obtain e | e := max_choice (temperature x) (temperature y)
+      exacts [.inl ⟨e ▸ hs, e.le⟩, .inr ⟨e ▸ hs, e.le⟩]) h
+    rwa [rightStop_cool, rightStop_cool, wall_apply_of_temperature_le (le_max_left _ _),
+      wall_apply_of_temperature_le (le_max_right _ _)] at this
 termination_by birthday x + birthday y
 
 theorem cool_le_cool (ht : ⊥ < t) (h : x ≤ y) : cool x t ≤ cool y t :=
@@ -651,6 +643,7 @@ theorem mean_congr (h : x ≈ y) : mean x = mean y := by
     wall_apply_of_temperature_le le_rfl
   rw [← H, ← H, wall_congr h, temperature_congr h]
 
+/-! ### Additivity -/
 
 theorem cool_add (ht : ⊥ < t) (x y : IGame) [Short x] [Short y] :
     cool (x + y) t ≈ cool x t + cool y t :=
